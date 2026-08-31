@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,3 +17,6 @@ class KnowledgeBaseDocument(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="approved")
+    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0")
+    is_publishable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

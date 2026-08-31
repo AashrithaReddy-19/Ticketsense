@@ -11,6 +11,7 @@ Usage (from backend/):
 
 import argparse
 import asyncio
+import os
 import re
 from pathlib import Path
 
@@ -58,10 +59,12 @@ async def main() -> None:
     args = parser.parse_args()
 
     env = dotenv_values(ROOT / ".env")
-    database_url = env.get("DATABASE_URL")
+    database_url = os.environ.get("DATABASE_URL") or env.get("DATABASE_URL")
     if not database_url:
         raise SystemExit("DATABASE_URL not set — copy .env.example to .env first.")
-    model_name = env.get("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    model_name = os.environ.get("EMBEDDING_MODEL") or env.get(
+        "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+    )
 
     conn = await asyncpg.connect(_asyncpg_url(database_url))
     await register_vector(conn)
@@ -80,6 +83,11 @@ async def main() -> None:
             SELECT k.id, k.title, k.content, d.name AS department
             FROM knowledge_base k
             JOIN departments d ON d.id = k.department_id
+            WHERE k.tenant_id IS NOT NULL
+              AND k.status = 'approved'
+              AND k.version = '1.0'
+              AND k.is_publishable = true
+              AND length(trim(k.content)) > 0
             ORDER BY d.name, k.title
             """
         )
@@ -116,8 +124,13 @@ async def main() -> None:
                 rows_to_insert,
             )
 
-        total = await conn.fetchval("SELECT count(*) FROM embeddings")
-        print(f"Inserted {len(rows_to_insert)} embeddings. SELECT count(*) = {total}.")
+        totals = await conn.fetchrow(
+            "SELECT count(*) AS total, count(embedding) AS non_null FROM embeddings"
+        )
+        print(
+            f"Inserted {len(rows_to_insert)} embeddings. "
+            f"SELECT count(*) = {totals['total']}; non-null vectors = {totals['non_null']}."
+        )
 
         by_dept = await conn.fetch(
             """

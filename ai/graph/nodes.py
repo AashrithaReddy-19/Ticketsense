@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -13,8 +14,10 @@ ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "models" / "artifacts"
 
 _env = dotenv_values(ROOT / ".env")
-_MODEL_NAME = _env.get("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-_DATABASE_URL = _env.get("DATABASE_URL", "")
+_MODEL_NAME = os.environ.get("EMBEDDING_MODEL") or _env.get(
+    "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+)
+_DATABASE_URL = os.environ.get("DATABASE_URL") or _env.get("DATABASE_URL", "")
 
 _embedding_model: SentenceTransformer | None = None
 _classifiers: dict | None = None
@@ -61,27 +64,43 @@ async def classify_node(state: TicketState) -> dict:
 async def retrieve_node(state: TicketState, top_k: int = 3) -> dict:
     """Second real stage: embeds the ticket description and runs a department-filtered
     pgvector similarity search, using the department classify_node just predicted."""
+    if not state.get("tenant_id"):
+        raise ValueError("retrieve_node requires state['tenant_id']")
     if not state.get("department"):
         raise ValueError("retrieve_node requires state['department'] — run classify_node first")
 
+    if not _DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not configured")
+
     model = _get_embedding_model()
     vector = model.encode(state["description"]).tolist()
+    article_version = state.get("article_version", "1.0")
 
     conn = await asyncpg.connect(_asyncpg_url(_DATABASE_URL))
     await register_vector(conn)
     try:
         rows = await conn.fetch(
             """
-            SELECT k.title, e.chunk_text, e.embedding <=> $1 AS distance
+            SELECT k.title, k.version AS article_version, e.chunk_text,
+                   e.embedding <=> $1 AS distance,
+                   1 - (e.embedding <=> $1) AS similarity
             FROM embeddings e
             JOIN knowledge_base k ON k.id = e.knowledge_base_id
             JOIN departments d ON d.id = k.department_id
-            WHERE d.name = $2
+            WHERE k.tenant_id = $2::uuid
+              AND d.name = $3
+              AND k.status = 'approved'
+              AND k.version = $4
+              AND k.is_publishable = true
+              AND length(trim(k.content)) > 0
+              AND length(trim(e.chunk_text)) > 0
             ORDER BY e.embedding <=> $1
-            LIMIT $3
+            LIMIT $5
             """,
             vector,
+            state["tenant_id"],
             state["department"],
+            article_version,
             top_k,
         )
     finally:
@@ -89,7 +108,13 @@ async def retrieve_node(state: TicketState, top_k: int = 3) -> dict:
 
     return {
         "retrieved_chunks": [
-            {"title": r["title"], "chunk_text": r["chunk_text"], "distance": r["distance"]}
+            {
+                "title": r["title"],
+                "chunk_text": r["chunk_text"],
+                "distance": float(r["distance"]),
+                "similarity": float(r["similarity"]),
+                "article_version": r["article_version"],
+            }
             for r in rows
         ]
     }
