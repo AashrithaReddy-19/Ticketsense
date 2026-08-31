@@ -1,13 +1,33 @@
+import asyncio
 import time
+from contextlib import asynccontextmanager, suppress
 from collections import defaultdict, deque
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import text
 from app.config import settings
-from app.routers import analytics, auth, health, platform, tickets
+from app.database import async_session_maker
+from app.routers import analytics, auth, health, platform, queues, tickets
 
-app = FastAPI(title="TicketSense API", version="0.1.0")
+async def cleanup_sessions() -> None:
+    while True:
+        try:
+            async with async_session_maker() as db:
+                await db.execute(text("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'")); await db.commit()
+        except Exception:
+            pass
+        await asyncio.sleep(settings.session_cleanup_interval_seconds)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    task=asyncio.create_task(cleanup_sessions())
+    yield
+    task.cancel()
+    with suppress(asyncio.CancelledError): await task
+
+app = FastAPI(title="TicketSense API", version="0.1.0", lifespan=lifespan)
 
 _request_windows: dict[str, deque[float]] = defaultdict(deque)
 
@@ -40,3 +60,4 @@ app.include_router(auth.router)
 app.include_router(tickets.router)
 app.include_router(analytics.router)
 app.include_router(platform.router)
+app.include_router(queues.router)

@@ -21,5 +21,6 @@ class UserPublic(BaseModel):
     role: str
     department_id: UUID | None
     tenant_id: UUID | None
+    permissions: list[str] = []
 
     model_config = {"from_attributes": True}

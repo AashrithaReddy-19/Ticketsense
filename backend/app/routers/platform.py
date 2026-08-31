@@ -11,6 +11,7 @@ from app.models.knowledge_base import KnowledgeBaseDocument
 from app.models.platform import AIDecision, AuditLog, Incident, Integration, KnowledgeArticle, Notification
 from app.models.ticket import Ticket
 from app.models.user import User
+from app.core.rbac import has_permission
 
 router = APIRouter(prefix="/api", tags=["platform"])
 
@@ -63,7 +64,8 @@ async def incidents(user: User = Depends(get_current_user), db: AsyncSession = D
 
 @router.get("/audit-logs")
 async def audit_logs(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    guard(user, {"enterprise_admin", "security_admin", "admin"})
+    if not has_permission(user.role, "audit:read"):
+        raise HTTPException(status_code=403, detail="Insufficient permission for this action")
     logs = (await db.scalars(select(AuditLog).where(AuditLog.tenant_id == user.tenant_id).order_by(AuditLog.created_at.desc()).limit(200))).all()
     return [{"id": x.id, "action": x.action, "resource_type": x.resource_type, "resource_id": x.resource_id, "metadata": x.metadata_json, "created_at": x.created_at} for x in logs]
 

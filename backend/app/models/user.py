@@ -1,6 +1,7 @@
 import uuid
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String
+from datetime import datetime
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,7 +12,7 @@ class User(Base, UUIDPKMixin, CreatedAtMixin):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('customer','support_agent','manager','enterprise_admin','ai_admin','knowledge_manager','security_admin','end_user','department_engineer','admin')", name="ck_users_role"
+            "role IN ('customer','support_agent','reviewer','knowledge_manager','team_lead','system_admin','auditor','ai_admin','manager','enterprise_admin','security_admin','end_user','department_engineer','admin')", name="ck_users_role"
         ),
     )
 
@@ -24,3 +25,5 @@ class User(Base, UUIDPKMixin, CreatedAtMixin):
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

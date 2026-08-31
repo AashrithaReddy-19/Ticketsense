@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "dev-only-insecure-secret-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
+    refresh_expire_days: int = 14
+    cookie_secure: bool = False
+    login_max_failures: int = 5
+    login_lock_minutes: int = 15
+    session_cleanup_interval_seconds: int = 3600
 
     @property
     def cors_origin_list(self) -> list[str]:

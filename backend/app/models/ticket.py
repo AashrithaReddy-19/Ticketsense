@@ -1,6 +1,7 @@
 import uuid
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, Text
+from datetime import datetime
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,3 +39,11 @@ class Ticket(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):
     # ticket-to-resolution similarity, document freshness, OCR confidence, category risk), so
     # human Accept/Edit/Reject/Escalate outcomes can be joined back to it for retraining.
     confidence_features: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    assignee_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    analysis_status: Mapped[str] = mapped_column(String(30), default="complete")
+    review_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    escalation_level: Mapped[str | None] = mapped_column(String(30))
+    routing_state: Mapped[str] = mapped_column(String(30), default="routed")
+    sensitivity: Mapped[str] = mapped_column(String(30), default="internal")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

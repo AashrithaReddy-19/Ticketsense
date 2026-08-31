@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
+import hashlib
+import secrets
 
 import bcrypt
 import jwt
@@ -30,3 +32,18 @@ def create_access_token(user_id: UUID, role: str, department_id: UUID | None, te
 
 def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+
+
+def create_refresh_token(user_id: UUID, session_id: UUID) -> tuple[str, datetime]:
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=settings.refresh_expire_days)
+    token = jwt.encode({"sub": str(user_id), "sid": str(session_id), "jti": str(uuid4()), "type": "refresh", "iat": now, "exp": expires}, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return token, expires
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def new_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
