@@ -19,6 +19,13 @@ class Settings(BaseSettings):
 
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
+    attachment_max_bytes: int = 10 * 1024 * 1024
+    attachment_max_pdf_pages: int = 25
+    attachment_max_extracted_chars: int = 50_000
+    attachment_context_chars: int = 8_000
+    attachment_max_image_pixels: int = 25_000_000
+    attachment_storage_root: str = "uploads/attachments"
+    attachment_extraction_timeout_seconds: int = 30
 
     jwt_secret_key: str = "dev-only-insecure-secret-change-me"
     jwt_algorithm: str = "HS256"

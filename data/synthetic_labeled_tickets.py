@@ -17,6 +17,7 @@ Usage (from backend/):
 
 import argparse
 import asyncio
+import os
 import re
 from pathlib import Path
 from uuid import UUID
@@ -368,7 +369,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     env = dotenv_values(ROOT / ".env")
-    database_url = env.get("DATABASE_URL")
+    database_url = os.environ.get("DATABASE_URL") or env.get("DATABASE_URL")
     if not database_url:
         raise SystemExit("DATABASE_URL not set — copy .env.example to .env first.")
 
@@ -376,6 +377,7 @@ async def main() -> None:
     try:
         bulk_user_id = await get_or_create_bulk_import_user(conn)
         department_ids = await get_department_ids(conn)
+        tenant_id = await conn.fetchval("SELECT id FROM organizations WHERE slug='ticketsense-demo'")
 
         existing = await conn.fetchval(
             "SELECT count(*) FROM tickets WHERE submitted_by = $1", bulk_user_id
@@ -395,11 +397,11 @@ async def main() -> None:
             await conn.executemany(
                 """
                 INSERT INTO tickets
-                    (submitted_by, department_id, subject, description, priority, sentiment)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                    (submitted_by, department_id, subject, description, priority, sentiment, tenant_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 """,
                 [
-                    (bulk_user_id, department_ids[dept], subject, description, priority, sentiment)
+                    (bulk_user_id, department_ids[dept], subject, description, priority, sentiment, tenant_id)
                     for dept, subject, description, priority, sentiment in TICKETS
                 ],
             )

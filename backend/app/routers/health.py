@@ -24,7 +24,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> HealthResponse:
     try:
         extension = await db.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='vector')"))
         revision = await db.scalar(text("SELECT version_num FROM alembic_version"))
-        if not extension or revision != "0007":
+        if not extension or not revision:
             raise HTTPException(status_code=503, detail="Required database components are not ready")
         return HealthResponse(status="ready", database="ok")
     except HTTPException:

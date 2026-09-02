@@ -15,6 +15,8 @@ from app.services.ticket_intelligence import analyze_ticket
 from app.services.ticket_visibility import get_visible_ticket, visible_ticket_query
 from app.models.department import Department
 from app.core.rbac import has_permission, is_customer
+from app.models.ai_draft import AIDraft
+from app.services.rag_pipeline import generate_and_store_draft, serialize_draft
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
 
@@ -117,6 +119,26 @@ async def evidence(ticket_id: str, user: User = Depends(get_current_user), db: A
     require_internal_ticket_access(user)
     ticket = await scoped_ticket(ticket_id, user, db)
     return (ticket.confidence_features or {}).get("analysis", {}).get("evidence", [])
+
+
+@router.get("/{ticket_id}/ai-draft")
+async def get_ai_draft(ticket_id:str,user:User=Depends(get_current_user),db:AsyncSession=Depends(get_db)):
+    require_internal_ticket_access(user); ticket=await scoped_ticket(ticket_id,user,db)
+    draft=await db.scalar(select(AIDraft).where(AIDraft.ticket_id==ticket.id,AIDraft.tenant_id==user.tenant_id))
+    if not draft: raise HTTPException(404,"Grounded draft has not been generated")
+    return serialize_draft(draft)
+
+
+@router.post("/{ticket_id}/ai-draft/generate")
+async def generate_ai_draft(ticket_id:str,payload:dict|None=None,user:User=Depends(get_current_user),db:AsyncSession=Depends(get_db)):
+    require_internal_ticket_access(user)
+    if not (has_permission(user.role,"ticket:update") or has_permission(user.role,"review:manage")):
+        raise HTTPException(403,"Draft regeneration is not allowed for this role")
+    ticket=await scoped_ticket(ticket_id,user,db)
+    if not ticket.tenant_id or not ticket.department_id: raise HTTPException(409,"Ticket must be tenant-scoped and routed before generation")
+    draft=await generate_and_store_draft(db,ticket,(payload or {}).get("article_version","1.0"))
+    db.add(TicketHistory(ticket_id=ticket.id,actor_id=user.id,action="grounded_draft_processed",detail={"status":draft.generation_status,"validation":draft.citation_validation_status}))
+    await db.commit(); await db.refresh(draft); return serialize_draft(draft)
 
 
 @router.get("/{ticket_id}/similar")

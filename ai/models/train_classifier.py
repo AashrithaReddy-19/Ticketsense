@@ -16,6 +16,7 @@ Usage (from backend/):
 """
 
 import asyncio
+import os
 import re
 from pathlib import Path
 
@@ -39,7 +40,7 @@ def _asyncpg_url(database_url: str) -> str:
 
 async def load_labeled_tickets() -> list[dict]:
     env = dotenv_values(ROOT / ".env")
-    database_url = env.get("DATABASE_URL")
+    database_url = os.environ.get("DATABASE_URL") or env.get("DATABASE_URL")
     if not database_url:
         raise SystemExit("DATABASE_URL not set — copy .env.example to .env first.")
 

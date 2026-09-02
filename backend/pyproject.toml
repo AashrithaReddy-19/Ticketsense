@@ -16,6 +16,10 @@ dependencies = [
     "email-validator>=2.2",
     "python-multipart>=0.0.12",
     "httpx>=0.27",
+    "pillow>=11.0",
+    "pypdf>=5.0",
+    "pypdfium2>=4.30",
+    "pytesseract>=0.3.13",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +31,12 @@ dev = ["pytest>=8.3", "pytest-asyncio>=0.24"]
 # wired into the live request path.
 ai = [
     "datasets>=3.0.0",
+    "sentence-transformers>=3.0.0",
+    "scikit-learn>=1.5",
+    "langgraph>=0.2",
+]
+# Live API path: excludes offline Hugging Face datasets/pyarrow/pandas tooling.
+rag = [
     "sentence-transformers>=3.0.0",
     "scikit-learn>=1.5",
     "langgraph>=0.2",

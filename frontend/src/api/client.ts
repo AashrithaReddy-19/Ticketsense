@@ -36,6 +36,9 @@ async function refreshAccessToken(){try{const response=await fetch(`${API_BASE_U
 
 export interface User { id:string; email:string; full_name:string; role:string; department_id:string|null; tenant_id:string|null; permissions:string[] }
 export interface Evidence { title:string; excerpt:string; score:number; source?:string }
+export interface GroundedEvidence { citation_id:string; article_id:string; title:string; article_version:string; department:string; chunk_text:string; similarity:number; distance:number; is_publishable:boolean }
+export interface GroundedDraft { ticket_id:string; draft_text:string|null; citations:Array<{citation_id:string;article_id:string;article_title:string;article_version:string;supported_text:string}>; evidence:GroundedEvidence[]; provider:string|null; model:string|null; generation_status:string; citation_validation_status:string; validation:{valid?:boolean;valid_citation_ids?:string[];invalid_citation_ids?:string[];uncited_claim_warnings?:string[];validation_errors?:string[];insufficient_evidence?:boolean}; generation_error:string|null; insufficient_evidence:boolean; attempt_count:number; created_at?:string; updated_at?:string }
+export interface AttachmentMeta {id:string;ticket_id:string;original_filename:string;detected_mime_type:string;file_extension:string;file_size_bytes:number;status:string;extraction_status:string;extraction_method?:string|null;sanitized_text?:string|null;ocr_confidence?:number|null;ocr_confidence_available?:boolean;page_count?:number|null;character_count?:number;truncated?:boolean;processing_duration_ms?:number|null;warnings?:string[];error_code?:string|null;error_summary?:string|null;created_at:string;processed_at?:string|null}
 export interface Analysis { category?:string; intent?:string; sentiment?:string; priority_score?:number; sla_risk?:number; confidence?:number; decision?:string; decision_reason?:string; root_causes?:Array<{label:string;probability:number}>; evidence?:Evidence[]; [key:string]:unknown }
 export interface Ticket { id:string; subject:string; description:string; status:string; priority:string|null; sentiment:string|null; department_id?:string|null; confidence_score:number|null; ai_draft_reply?:string|null; created_at:string; updated_at?:string; analysis:Analysis }
 export interface Analytics { total_tickets:number; open_tickets:number; resolved_tickets:number; escalated_tickets:number; average_confidence:number; status_distribution:Record<string,number> }
@@ -56,9 +59,15 @@ export const api = {
   tickets: (query="",status="") => request<Ticket[]>(`/api/tickets?${new URLSearchParams({q:query,status_filter:status})}`),
   ticket: (id:string) => request<Ticket>(`/api/tickets/${id}`),
   createTicket: (payload:Record<string,string>) => request<Ticket>("/api/tickets",{method:"POST",body:JSON.stringify(payload)}),
+  uploadAttachment: (id:string,file:File) => {const body=new FormData();body.append("file",file);return request<AttachmentMeta>(`/api/tickets/${id}/attachment`,{method:"POST",body})},
+  attachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment`),
+  processAttachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment/process`,{method:"POST"}),
+  deleteAttachment: (id:string) => request<void>(`/api/tickets/${id}/attachment`,{method:"DELETE"}),
   ticketAction: (id:string,payload:{action:string;response?:string;reason?:string}) => request<Ticket>(`/api/tickets/${id}/action`,{method:"POST",body:JSON.stringify(payload)}),
   analysis: (id:string) => request<Analysis>(`/api/tickets/${id}/ai-analysis`),
   evidence: (id:string) => request<Evidence[]>(`/api/tickets/${id}/evidence`),
+  groundedDraft: (id:string) => request<GroundedDraft>(`/api/tickets/${id}/ai-draft`),
+  generateGroundedDraft: (id:string,article_version="1.0") => request<GroundedDraft>(`/api/tickets/${id}/ai-draft/generate`,{method:"POST",body:JSON.stringify({article_version})}),
   similar: (id:string) => request<Array<{id:string;subject:string;status:string;similarity:number;resolution?:string}>>(`/api/tickets/${id}/similar`),
   trace: (id:string) => request<Array<{action:string;detail:Record<string,unknown>;timestamp:string}>>(`/api/tickets/${id}/trace`),
   analytics: () => request<Analytics>("/api/analytics"),

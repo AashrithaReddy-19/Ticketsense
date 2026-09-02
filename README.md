@@ -57,6 +57,8 @@ The default deterministic provider keeps the complete workflow runnable without 
 - `POST /api/auth/login`, `POST /api/auth/register`, `GET /api/auth/me`
 - `POST /api/tickets`, `GET /api/tickets`, `GET /api/tickets/{id}`
 - `POST /api/tickets/{id}/action`, `POST /api/tickets/{id}/feedback`
+- `POST /api/tickets/{id}/attachment`, `GET /.../attachment`, `POST /.../attachment/process`, `GET /.../attachment/download`, `DELETE /.../attachment`
+- `GET /api/tickets/{id}/ai-draft`, `POST /api/tickets/{id}/ai-draft/generate`
 - `GET /api/tickets/{id}/ai-analysis`, `/evidence`, `/similar`, `/trace`
 - `GET /api/knowledge`, article generation and approval endpoints
 - `GET /api/analytics`, `/api/ai/metrics`, `/api/incidents`
@@ -72,7 +74,8 @@ ai/            provider abstraction, LangGraph pipeline, embeddings and ML train
 frontend/      React + TypeScript enterprise role-aware workspace
 db/            Alembic migrations, organization/demo seed, curated knowledge
 data/          privacy-safe synthetic ticket generation and import tools
-docs/          architecture and research evaluation protocol
+docs/          architecture, research evaluation protocol, and weekly delivery notes
+               (docs/WEEK6_GROUNDED_RAG.md, docs/WEEK7_ATTACHMENT_OCR.md)
 docker-compose.yml
 ```
 
