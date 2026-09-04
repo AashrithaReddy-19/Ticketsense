@@ -212,12 +212,16 @@ async def confirm_resolution(ticket_id: UUID, payload: ConfirmationCreate, idemp
         raise HTTPException(403, "Customer confirmation required")
     visible = await get_visible_ticket(db, user, ticket_id)
     ticket = await locked_ticket(db, visible.id, user.tenant_id)
-    if ticket.status not in {"resolved", "resolved_by_ai", "resolved_by_engineer"}:
-        raise HTTPException(409, "Only a resolved ticket can be confirmed")
     if idempotency_key:
+        # Checked before the status guard: the transition this endpoint performs (resolved ->
+        # closed/reopened) moves the ticket out of the very status this endpoint requires, so a
+        # legitimate retry of an already-applied request must replay the original result rather
+        # than fail on a status guard that the first call itself made no longer true.
         existing = await db.scalar(select(ResolutionConfirmation).where(ResolutionConfirmation.tenant_id == user.tenant_id, ResolutionConfirmation.idempotency_key == idempotency_key))
         if existing:
-            return {"ticket_id": ticket.id, "status": ticket.status, "outcome": existing.outcome}
+            return {"ticket_id": ticket.id, "status": ticket.status, "outcome": existing.outcome, "reopened_count": ticket.reopened_count}
+    if ticket.status not in {"resolved", "resolved_by_ai", "resolved_by_engineer"}:
+        raise HTTPException(409, "Only a resolved ticket can be confirmed")
     confirmation = ResolutionConfirmation(tenant_id=user.tenant_id, ticket_id=ticket.id, user_id=user.id,
         outcome=payload.outcome, reason=payload.reason, response_fingerprint=ticket.last_auto_resolution_fingerprint,
         idempotency_key=idempotency_key)
