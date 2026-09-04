@@ -46,6 +46,18 @@ class DescriptionImprovement(BaseModel):
     provider: str
     model: str
 
+LANGUAGE_NAMES = {"en": "English", "hi": "Hindi", "te": "Telugu", "ta": "Tamil"}
+
+class TranslationResult(BaseModel):
+    translated_text: str
+    source_language: str
+    target_language: str
+    provider: str
+    model: str
+    machine_translated: bool
+    available: bool
+    note: str | None = None
+
 class LLMProvider(ABC):
     @abstractmethod
     async def generate_grounded_draft(self, ticket_context: dict[str, Any], retrieved_evidence: list[dict[str, Any]], generation_settings: dict[str, Any] | None = None) -> DraftGenerationResult:
@@ -54,6 +66,12 @@ class LLMProvider(ABC):
     async def improve_description(self, subject: str, description: str) -> DescriptionImprovement:
         """Improve only supplied facts; providers may override this capability."""
         raise RuntimeError("Description improvement is not supported by this provider")
+
+    async def translate(self, text: str, source_language: str, target_language: str) -> TranslationResult:
+        """Translate customer-safe text. Providers must never fabricate a translation
+        they cannot actually produce — see DeterministicDevelopmentProvider for the
+        required graceful-fallback shape when no real provider is configured."""
+        raise RuntimeError("Translation is not supported by this provider")
 
 class DeterministicDevelopmentProvider(LLMProvider):
     """Clearly labelled no-credential provider that uses only supplied passages."""
@@ -96,6 +114,17 @@ class DeterministicDevelopmentProvider(LLMProvider):
         if not re.search(r"always|every time|sometimes|intermittent|once", combined): questions.append("Does the issue happen every time or intermittently?")
         if not re.search(r"blocked|cannot work|workaround|urgent|impact", combined): questions.append("Is your work completely blocked, or is a workaround available?")
         return DescriptionImprovement(suggested=cleaned, missing_information_questions=questions[:4], provider="deterministic-development", model="description-clarity-rules-v1")
+
+    async def translate(self, text: str, source_language: str, target_language: str) -> TranslationResult:
+        if source_language == target_language:
+            return TranslationResult(translated_text=text, source_language=source_language, target_language=target_language,
+                                      provider="deterministic-development", model="none", machine_translated=False, available=True)
+        # No real translation model is configured locally; returning the untranslated
+        # original text labelled as unavailable is the required graceful fallback —
+        # never present unmodified source text as if it had actually been translated.
+        return TranslationResult(translated_text=text, source_language=source_language, target_language=target_language,
+                                  provider="deterministic-development", model="none", machine_translated=False, available=False,
+                                  note=f"No translation provider is configured; showing the original {LANGUAGE_NAMES.get(source_language, source_language)} text.")
 
 class OpenAICompatibleProvider(LLMProvider):
     """A real, configurable provider for any OpenAI-compatible chat-completions API
@@ -197,6 +226,29 @@ class OpenAICompatibleProvider(LLMProvider):
         })
         parsed = json.loads(re.sub(r"^```(?:json)?|```$", "", body["choices"][0]["message"]["content"].strip(), flags=re.MULTILINE).strip())
         return DescriptionImprovement(suggested=str(parsed["suggested"]), missing_information_questions=list(parsed.get("missing_information_questions", []))[:4], provider="openai_compatible", model=self._model)
+
+    async def translate(self, text: str, source_language: str, target_language: str) -> TranslationResult:
+        if source_language == target_language:
+            return TranslationResult(translated_text=text, source_language=source_language, target_language=target_language,
+                                      provider="openai_compatible", model=self._model, machine_translated=False, available=True)
+        source_name, target_name = LANGUAGE_NAMES.get(source_language, source_language), LANGUAGE_NAMES.get(target_language, target_language)
+        try:
+            body = await self._post_with_retry({
+                "model": self._model,
+                "messages": [
+                    {"role": "system", "content": f"Translate the user's {source_name} text to {target_name}. Preserve technical terms, "
+                     'error codes, and URLs unchanged. Respond with ONLY JSON: {"translated_text": string}.'},
+                    {"role": "user", "content": text},
+                ],
+                "temperature": 0,
+            })
+            parsed = json.loads(re.sub(r"^```(?:json)?|```$", "", body["choices"][0]["message"]["content"].strip(), flags=re.MULTILINE).strip())
+            return TranslationResult(translated_text=str(parsed["translated_text"]), source_language=source_language, target_language=target_language,
+                                      provider="openai_compatible", model=self._model, machine_translated=True, available=True)
+        except Exception:
+            return TranslationResult(translated_text=text, source_language=source_language, target_language=target_language,
+                                      provider="openai_compatible", model=self._model, machine_translated=False, available=False,
+                                      note="The configured translation provider failed; showing the original text.")
 
 
 def get_llm_provider(provider_name: str) -> LLMProvider:

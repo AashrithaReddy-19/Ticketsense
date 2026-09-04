@@ -23,8 +23,23 @@ from app.services.resolution_policy import process_resolution_decision, serializ
 from app.services.sla import breach_risk
 from app.services.ticket_visibility import get_visible_ticket, visible_ticket_query
 from app.services.workflow import auto_assign_ticket, locked_ticket, record_event, transition
+from app.config import settings
+from ai.agents.llm_interface import get_llm_provider
 
 router = APIRouter(prefix="/api", tags=["enterprise-platform"])
+
+
+class TranslateRequest(BaseModel):
+    target_language: str = Field(pattern="^(en|hi|te|ta)$")
+
+
+async def run_translation(text: str, source_language: str, target_language: str) -> dict:
+    try:
+        result = await get_llm_provider(settings.llm_provider).translate(text, source_language, target_language)
+    except Exception:
+        from ai.agents.llm_interface import DeterministicDevelopmentProvider
+        result = await DeterministicDevelopmentProvider().translate(text, source_language, target_language)
+    return result.model_dump()
 
 
 class MessageCreate(BaseModel):
@@ -205,6 +220,35 @@ async def read_message(ticket_id: UUID, message_id: UUID, user: User = Depends(g
         db.add(TicketMessageRead(message_id=message.id, user_id=user.id))
         await db.commit()
     return {"message_id": message.id, "is_read": True}
+
+
+@router.post("/tickets/{ticket_id}/messages/{message_id}/translate")
+async def translate_message(ticket_id: UUID, message_id: UUID, payload: TranslateRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    ticket = await get_visible_ticket(db, user, ticket_id)
+    message = await db.scalar(select(TicketMessage).where(TicketMessage.id == message_id, TicketMessage.ticket_id == ticket.id, TicketMessage.tenant_id == user.tenant_id))
+    if not message or is_customer(user.role) and message.visibility != "public":
+        raise HTTPException(404, "Message not found")
+    result = await run_translation(message.body, message.original_language, payload.target_language)
+    if result["available"]:
+        message.translated_body = result["translated_text"]
+        message.translated_language = payload.target_language
+        message.machine_translated = result["machine_translated"]
+        await db.commit()
+    return {"message_id": message.id, **result}
+
+
+@router.post("/tickets/{ticket_id}/resolution/translate")
+async def translate_resolution(ticket_id: UUID, payload: TranslateRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Translates the customer-safe final response on demand. Computed from the
+    already-approved evidence-grounded text; never re-generates or re-approves
+    an answer, and is not persisted — it is display-time translation only."""
+    ticket = await get_visible_ticket(db, user, ticket_id)
+    if is_customer(user.role) and ticket.submitted_by != user.id:
+        raise HTTPException(404, "Ticket not found")
+    if not ticket.final_response:
+        raise HTTPException(409, "This ticket does not yet have a published resolution to translate")
+    result = await run_translation(ticket.final_response, "en", payload.target_language)
+    return {"ticket_id": ticket.id, **result}
 
 
 @router.post("/tickets/{ticket_id}/resolution-confirmation")

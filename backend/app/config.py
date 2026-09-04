@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_lock_minutes: int = 15
     session_cleanup_interval_seconds: int = 3600
+    # General per-client abuse throttle (not the account-specific login lockout above,
+    # which remains the actual brute-force defense). Keyed by client host, so shared
+    # NAT/corporate-proxy traffic and a dashboard's own auto-refresh polling across
+    # several open tabs must fit comfortably inside this budget.
+    general_rate_limit_requests: int = 600
+    general_rate_limit_window_seconds: int = 60
 
     @property
     def cors_origin_list(self) -> list[str]:

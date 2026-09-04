@@ -36,8 +36,8 @@ _request_windows: dict[str, deque[float]] = defaultdict(deque)
 async def enterprise_security(request: Request, call_next):
     now = time.monotonic(); client = request.client.host if request.client else "unknown"
     window = _request_windows[client]
-    while window and now - window[0] > 60: window.popleft()
-    if len(window) >= 180:
+    while window and now - window[0] > settings.general_rate_limit_window_seconds: window.popleft()
+    if len(window) >= settings.general_rate_limit_requests:
         return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
     window.append(now)
     response = await call_next(request)
