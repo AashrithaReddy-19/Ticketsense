@@ -269,4 +269,24 @@ async def approve_draft(db: AsyncSession, ticket: Ticket, reviewer: User, draft:
     ticket.resolved_at = now
     from ai.embeddings.resolution_index import index_resolution
     await index_resolution(db, ticket)
+    await flag_knowledge_gap_if_unsupported(db, ticket, approved)
     return approved
+
+
+async def flag_knowledge_gap_if_unsupported(db: AsyncSession, ticket: Ticket, approved: ResponseDraft) -> None:
+    """A human resolved this ticket with no cited evidence at all — the clearest
+    available signal that no approved knowledge source covered the issue.
+    Drafts a pending-review KnowledgeArticle from the verified resolution so an
+    Admin/Knowledge manager can turn it into real coverage; never auto-published,
+    never blocks ticket resolution if it fails."""
+    if approved.citations:
+        return
+    try:
+        from app.models.platform import KnowledgeArticle
+        existing = await db.scalar(select(KnowledgeArticle).where(KnowledgeArticle.tenant_id == ticket.tenant_id, KnowledgeArticle.source_ticket_ids.contains([str(ticket.id)])))
+        if existing:
+            return
+        db.add(KnowledgeArticle(tenant_id=ticket.tenant_id, department_id=ticket.department_id, title=f"Resolution: {ticket.subject}"[:255],
+                                 body=approved.content, status="pending_review", source_ticket_ids=[str(ticket.id)], source_signal="no_cited_evidence_at_resolution"))
+    except Exception:
+        pass

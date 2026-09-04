@@ -59,6 +59,9 @@ class KnowledgeArticle(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):
     version: Mapped[str] = mapped_column(String(20), default="1.0")
     source_ticket_ids: Mapped[list] = mapped_column(JSONB, default=list)
     approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    published_knowledge_base_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("knowledge_base.id", ondelete="SET NULL"))
+    rejected_reason: Mapped[str | None] = mapped_column(Text)
+    source_signal: Mapped[str | None] = mapped_column(String(60))
 
 
 class SLAPolicy(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):
