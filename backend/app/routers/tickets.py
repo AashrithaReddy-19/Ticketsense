@@ -23,6 +23,7 @@ from ai.agents.llm_interface import get_llm_provider
 from app.config import settings
 from app.services.confidence_gate import evaluate_confidence
 from app.services.pipeline_metrics import StageTiming, persist_stage_timings, stage_timer
+from app.services.sla import compute_sla_due_at
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -110,6 +111,8 @@ async def create_ticket(payload: TicketCreate, user: User = Depends(get_current_
         ai_draft_reply=analysis["draft"], confidence_score=confidence["score"], confidence_features={"analysis": analysis, "confidence_model":confidence, "input": payload.model_dump()},review_required=review,review_reason=f"Confidence gate: {confidence['gate']} ({confidence['model_version']})" if review else None,routing_state="routed" if department else "manual_triage")
     ticket.public_status_message = f"Your ticket has been assigned to the {department.name} team." if department else PUBLIC_MESSAGES["submitted"]
     db.add(ticket); await db.flush()
+    if user.tenant_id:
+        ticket.sla_due_at = await compute_sla_due_at(db, user.tenant_id, ticket.priority, ticket.created_at or datetime.now(timezone.utc))
     timings.append(StageTiming(stage="total_intake_pipeline", started_at=datetime.now(timezone.utc), ended_at=datetime.now(timezone.utc), duration_ms=round((time.monotonic()-pipeline_started)*1000), success=True))
     persist_stage_timings(db, user.tenant_id, ticket.id, trace_id, timings)
     stages = [("ticket_submitted", None, "submitted", "both"), ("ai_processing_started", "submitted", "processing", "internal"), ("ticket_classified", "processing", "classified", "internal")]

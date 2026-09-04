@@ -100,6 +100,14 @@ async def main() -> None:
                 await conn.execute("""INSERT INTO department_resolution_policies(tenant_id,department_id,version,allow_auto_resolution,auto_resolve_threshold,minimum_citation_coverage,minimum_retrieval_score,minimum_classification_confidence,minimum_classification_margin,auto_resolution_allowlist,sensitive_category_denylist,updated_by,reason)
                   VALUES($1,$2,1,$3,$4,.8,.65,.75,.15,$5::jsonb,$6::jsonb,$7,'Deterministic demonstration policy; all safety gates remain mandatory')""",
                   tenant_id, department_ids[department_name], bool(allowlist), threshold, __import__("json").dumps(allowlist), __import__("json").dumps(sensitive), admin_id)
+        if not await conn.fetchval("SELECT EXISTS(SELECT 1 FROM sla_policies WHERE tenant_id=$1)", tenant_id):
+            for priority, response_minutes, resolution_minutes in (
+                ("urgent", 15, 4 * 60), ("high", 30, 8 * 60), ("medium", 120, 24 * 60), ("low", 480, 72 * 60),
+            ):
+                await conn.execute(
+                    "INSERT INTO sla_policies(tenant_id,name,priority,response_minutes,resolution_minutes,is_active) VALUES($1,$2,$3,$4,$5,true)",
+                    tenant_id, f"{priority.title()} priority", priority, response_minutes, resolution_minutes,
+                )
     finally:
         await conn.close()
 

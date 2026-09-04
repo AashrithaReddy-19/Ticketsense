@@ -20,6 +20,7 @@ from app.models.ticket import Ticket
 from app.models.user import User
 from app.services.rag_pipeline import generate_and_store_draft
 from app.services.resolution_policy import process_resolution_decision, serialize_decision
+from app.services.sla import breach_risk
 from app.services.ticket_visibility import get_visible_ticket, visible_ticket_query
 from app.services.workflow import auto_assign_ticket, locked_ticket, record_event, transition
 
@@ -344,5 +345,7 @@ async def experience_dashboard(experience_name: str, user: User = Depends(get_cu
         payload["resolved_by_engineer"] = counts.get("resolved_by_engineer", 0) + counts.get("resolved", 0)
         payload["needs_assignment"] = counts.get("awaiting_assignment", 0)
         payload["failed_ai_processing"] = counts.get("ai_processing_failed", 0)
-        payload["sla_at_risk"] = sum(1 for ticket in tickets if ticket.sla_due_at and ticket.sla_due_at <= datetime.now(timezone.utc))
+        open_states = {"resolved", "resolved_by_ai", "resolved_by_engineer", "closed"}
+        payload["sla_at_risk"] = sum(1 for ticket in tickets if ticket.status not in open_states and ticket.sla_due_at and breach_risk(ticket.sla_due_at, ticket.created_at)["status"] == "at_risk")
+        payload["sla_breached"] = sum(1 for ticket in tickets if ticket.status not in open_states and ticket.sla_due_at and breach_risk(ticket.sla_due_at, ticket.created_at)["status"] == "breached")
     return payload

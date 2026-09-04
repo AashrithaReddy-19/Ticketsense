@@ -14,13 +14,15 @@ from app.core.rbac import canonical_role,has_permission
 from app.models.response_draft import ResponseDraft
 from app.services.workflow import approve_draft,create_draft,locked_ticket,transition
 from app.services.ticket_visibility import get_visible_ticket,visible_ticket_query
+from app.services.sla import breach_risk
 
 router=APIRouter(prefix="/api/queues",tags=["queues"])
 class ReviewDecision(BaseModel): decision:str=Field(pattern="^(approve|modify|reject|return)$"); reason:str=Field(min_length=3,max_length=2000); final_response:str|None=None
 
 def summary(t:Ticket):
     a=(t.confidence_features or {}).get("analysis",{}); score=float(t.confidence_score or 0)
-    return {"id":t.id,"display_id":str(t.id)[:8].upper(),"title":t.subject,"requester_id":t.submitted_by,"department_id":t.department_id,"assignee_id":t.assignee_id,"status":t.status,"priority":t.priority,"sla_state":"at_risk" if a.get("sla_risk",0)>=70 else "on_track","created_at":t.created_at,"updated_at":t.updated_at,"analysis_status":t.analysis_status,"review_required":t.review_required,"review_reason":t.review_reason,"confidence_band":"high" if score>=.75 else "medium" if score>=.5 else "low","risk":a.get("risk","medium")}
+    sla_state=breach_risk(t.sla_due_at,t.created_at)["status"] if t.sla_due_at else ("at_risk" if a.get("sla_risk",0)>=70 else "on_track")
+    return {"id":t.id,"display_id":str(t.id)[:8].upper(),"title":t.subject,"requester_id":t.submitted_by,"department_id":t.department_id,"assignee_id":t.assignee_id,"status":t.status,"priority":t.priority,"sla_state":sla_state,"sla_due_at":t.sla_due_at,"created_at":t.created_at,"updated_at":t.updated_at,"analysis_status":t.analysis_status,"review_required":t.review_required,"review_reason":t.review_reason,"confidence_band":"high" if score>=.75 else "medium" if score>=.5 else "low","risk":a.get("risk","medium")}
 
 @router.get("/{queue_type}")
 async def queue(queue_type:str,page:int=Query(1,ge=1),page_size:int=Query(20,ge=1,le=100),user:User=Depends(get_current_user),db:AsyncSession=Depends(get_db)):
