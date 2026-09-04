@@ -10,7 +10,9 @@ from app.models.platform import AuditLog
 from app.models.ticket import Ticket
 from app.models.ticket_history import TicketHistory
 from app.models.user import User
-from app.core.rbac import canonical_role
+from app.core.rbac import canonical_role,has_permission
+from app.models.response_draft import ResponseDraft
+from app.services.workflow import approve_draft,create_draft,locked_ticket,transition
 from app.services.ticket_visibility import get_visible_ticket,visible_ticket_query
 
 router=APIRouter(prefix="/api/queues",tags=["queues"])
@@ -31,20 +33,22 @@ async def queue(queue_type:str,page:int=Query(1,ge=1),page_size:int=Query(20,ge=
 @router.post("/tickets/{ticket_id}/accept")
 async def accept(ticket_id:UUID,user:User=Depends(get_current_user),db:AsyncSession=Depends(get_db)):
     if canonical_role(user.role)!="support_agent": raise HTTPException(403,"Agent role required")
-    ticket=await get_visible_ticket(db,user,ticket_id)
+    visible=await get_visible_ticket(db,user,ticket_id); ticket=await locked_ticket(db,visible.id,user.tenant_id)
     if ticket.assignee_id and ticket.assignee_id!=user.id: raise HTTPException(409,"Ticket is already assigned")
-    ticket.assignee_id=user.id; ticket.status="in_review"
-    db.add(TicketHistory(ticket_id=ticket.id,actor_id=user.id,action="assignment_accepted",detail={}))
-    db.add(AuditLog(tenant_id=user.tenant_id,user_id=user.id,action="ticket.assigned",resource_type="ticket",resource_id=str(ticket.id),metadata_json={}))
+    ticket.assignee_id=user.id
+    if ticket.status in {"routed","reopened","escalated"}: transition(db,ticket,user,"assigned","assignment_accepted",visibility="both")
+    elif ticket.status!="assigned": raise HTTPException(409,"Ticket is not available for assignment")
     await db.commit(); await db.refresh(ticket); return summary(ticket)
 
 @router.post("/reviews/{ticket_id}")
 async def review(ticket_id:UUID,payload:ReviewDecision,user:User=Depends(get_current_user),db:AsyncSession=Depends(get_db)):
-    if canonical_role(user.role)!="reviewer": raise HTTPException(403,"Reviewer permission required")
-    ticket=await get_visible_ticket(db,user,ticket_id); analysis=(ticket.confidence_features or {}).get("analysis",{})
+    if not has_permission(user.role,"review:manage"): raise HTTPException(403,"Reviewer permission required")
+    visible=await get_visible_ticket(db,user,ticket_id); ticket=await locked_ticket(db,visible.id,user.tenant_id); analysis=(ticket.confidence_features or {}).get("analysis",{})
+    draft=await db.get(ResponseDraft,ticket.latest_draft_id) if ticket.latest_draft_id else None
+    if not draft or draft.status!="submitted_for_review": raise HTTPException(409,"A submitted engineer response is required")
     await db.execute(text("""INSERT INTO human_reviews(tenant_id,ticket_id,reviewer_id,decision,reason,original_ai_draft,final_response,confidence_snapshot,risk_snapshot,evidence_snapshot) VALUES(:tid,:ticket,:reviewer,:decision,:reason,:draft,:final,:confidence,CAST(:risk AS jsonb),CAST(:evidence AS jsonb))"""),{"tid":user.tenant_id,"ticket":ticket.id,"reviewer":user.id,"decision":payload.decision,"reason":payload.reason,"draft":ticket.ai_draft_reply,"final":payload.final_response,"confidence":ticket.confidence_score,"risk":json.dumps({"risk":analysis.get("risk","medium")}),"evidence":json.dumps(analysis.get("evidence",[]))})
-    ticket.status="resolved" if payload.decision in {"approve","modify"} else "in_review"; ticket.review_required=payload.decision in {"reject","return"};
-    if payload.final_response: ticket.ai_draft_reply=payload.final_response
-    db.add(TicketHistory(ticket_id=ticket.id,actor_id=user.id,action=f"review_{payload.decision}",detail={"reason":payload.reason}))
-    db.add(AuditLog(tenant_id=user.tenant_id,user_id=user.id,action=f"review.{payload.decision}",resource_type="ticket",resource_id=str(ticket.id),metadata_json={"reason":payload.reason}))
+    if payload.decision in {"approve","modify"}:
+        approved=await approve_draft(db,ticket,user,draft,payload.final_response,payload.reason,payload.decision=="modify"); ticket.review_required=False
+    else:
+        draft.status="rejected" if payload.decision=="reject" else "changes_requested"; transition(db,ticket,user,"changes_requested",f"review_{payload.decision}",payload.reason,"internal",draft.version_number); ticket.review_required=False
     await db.commit(); await db.refresh(ticket); return {"stored":True,"ticket":summary(ticket)}

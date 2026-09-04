@@ -75,7 +75,8 @@ frontend/      React + TypeScript enterprise role-aware workspace
 db/            Alembic migrations, organization/demo seed, curated knowledge
 data/          privacy-safe synthetic ticket generation and import tools
 docs/          architecture, research evaluation protocol, and weekly delivery notes
-               (docs/WEEK6_GROUNDED_RAG.md, docs/WEEK7_ATTACHMENT_OCR.md)
+               (docs/WEEK6_GROUNDED_RAG.md, docs/WEEK7_ATTACHMENT_OCR.md,
+               docs/PHASE_1_17_IMPLEMENTATION.md, ../CHANGELOG.md)
 docker-compose.yml
 ```
 
@@ -106,6 +107,9 @@ For optional training and pgvector embedding tools, use `uv sync --extra ai`.
 ## Research positioning
 
 Individual techniques such as classification, RAG and routing are established. TicketSense's contribution is their integrated, measurable decision workflow: cross-source evidence, multi-agent validation, risk-aware autonomy, contradiction handling, incident and knowledge-gap detection, resolution replay, and feedback-to-knowledge learning. See [research-evaluation.md](docs/research-evaluation.md) for the experiment matrix and leakage-safe evaluation protocol.
+
+Release B's persisted explainable pipeline, entity rules, grounding limitations and
+staff-only APIs are documented in [RELEASE_B_IMPLEMENTATION.md](docs/RELEASE_B_IMPLEMENTATION.md).
 
 ## Security notes
 

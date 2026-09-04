@@ -19,6 +19,7 @@ class UserPublic(BaseModel):
     email: str
     full_name: str
     role: str
+    public_role: str
     department_id: UUID | None
     tenant_id: UUID | None
     permissions: list[str] = []

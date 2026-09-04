@@ -35,7 +35,7 @@ export default function Dashboard() {
   if (error) return <div className="content"><ErrorState message={error} onRetry={load} /></div>;
 
   const open = tickets.filter(x => !["resolved", "closed"].includes(x.status)).length;
-  const inReview = tickets.filter(x => x.status === "in_review").length;
+  const inReview = tickets.filter(x => x.status === "pending_review").length;
   const resolved = tickets.filter(x => x.status === "resolved" || x.status === "closed").length;
 
   return (

@@ -11,8 +11,9 @@ def visibility_conditions(user:User,queue:str="all"):
     elif role=="support_agent":
         assigned=Ticket.assignee_id==user.id; dept=and_(Ticket.department_id==user.department_id,Ticket.assignee_id.is_(None)); general=and_(Ticket.department_id.is_(None),Ticket.routing_state=="manual_triage")
         scope={"assigned":assigned,"department_triage":dept,"general_triage":general,"escalated":and_(or_(assigned,dept),Ticket.status=="escalated")}.get(queue,or_(assigned,dept,general))
-    elif role=="reviewer": scope=and_(Ticket.department_id==user.department_id,or_(Ticket.review_required.is_(True),Ticket.status=="in_review"))
+    elif role=="reviewer": scope=and_(Ticket.department_id==user.department_id,or_(Ticket.review_required.is_(True),Ticket.status=="pending_review"))
     elif role=="team_lead": scope=Ticket.department_id==user.department_id
+    elif role=="system_admin": scope=True
     elif role=="auditor": scope=Ticket.sensitivity!="confidential"
     elif role=="knowledge_manager": scope=and_(Ticket.department_id==user.department_id,Ticket.routing_state=="knowledge_review")
     else: scope=False

@@ -12,6 +12,9 @@ import Login from "./pages/Login";
 import RoleQueue from "./pages/RoleQueue";
 import { AIMetrics, Audit, Integrations } from "./pages/AdminData";
 import KnowledgePipeline from "./pages/KnowledgePipeline";
+import AdminEngineers from "./pages/AdminEngineers";
+import AnalyticsDashboard from "./pages/AnalyticsDashboard";
+import AdminPortal from "./pages/AdminPortal";
 import { Loading } from "./components/States";
 import { ToastProvider } from "./components/ui/Toast";
 import "./tokens.css";
@@ -37,8 +40,17 @@ export function RoleRoute({ roles, children }: { roles: string[]; children: Reac
   return <>{children}</>;
 }
 
-function Planned({ title }: { title: string }) {
-  return <div className="content"><div className="page-title"><div><h1>{title}</h1><p>This protected module is planned and currently in progress.</p></div></div></div>;
+export function CapabilityRoute({ anyOf, children }: { anyOf: string[]; children: React.ReactNode }) {
+  const { user, loading, hasPermission } = useAuth();
+  if (loading) return <Loading label="Checking permissions..." />;
+  if (!user || !anyOf.some(hasPermission)) return <div className="content"><div className="error-box"><h2>Access denied</h2><p>Your account does not have the required capability for this module.</p></div></div>;
+  return <>{children}</>;
+}
+
+function publicExperience(role: string, declared?: string) {
+  if (declared) return declared;
+  const canonical = aliases[role] || role;
+  return canonical === "customer" ? "customer" : canonical === "support_agent" ? "engineer" : "admin";
 }
 
 export function Protected() {
@@ -48,11 +60,15 @@ export function Protected() {
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   return <Shell><Routes>
     <Route path="/dashboard" element={<Dashboard />} />
-    <Route path="/portal" element={<RoleRoute roles={["customer"]}><Dashboard /></RoleRoute>} />
-    <Route path="/agent" element={<RoleRoute roles={["support_agent"]}><RoleQueue /></RoleRoute>} />
-    <Route path="/review" element={<RoleRoute roles={["reviewer"]}><RoleQueue /></RoleRoute>} />
-    <Route path="/operations" element={<RoleRoute roles={["team_lead"]}><RoleQueue /></RoleRoute>} />
-    <Route path="/admin" element={<RoleRoute roles={["system_admin"]}><Planned title="Administration console" /></RoleRoute>} />
+    <Route path="/customer" element={publicExperience(user.role, user.public_role) === "customer" ? <Dashboard /> : <Navigate to={`/${publicExperience(user.role, user.public_role)}`} replace />} />
+    <Route path="/engineer" element={publicExperience(user.role, user.public_role) === "engineer" ? <RoleQueue /> : <Navigate to={`/${publicExperience(user.role, user.public_role)}`} replace />} />
+    <Route path="/admin" element={publicExperience(user.role, user.public_role) === "admin" ? <AdminPortal /> : <Navigate to={`/${publicExperience(user.role, user.public_role)}`} replace />} />
+    <Route path="/portal" element={<Navigate to="/customer" replace />} />
+    <Route path="/agent" element={<Navigate to="/engineer" replace />} />
+    <Route path="/operations" element={<Navigate to="/admin" replace />} />
+    <Route path="/review" element={<CapabilityRoute anyOf={["review:manage"]}><RoleQueue /></CapabilityRoute>} />
+    <Route path="/admin/engineers" element={<CapabilityRoute anyOf={["user:manage"]}><AdminEngineers /></CapabilityRoute>} />
+    <Route path="/analytics" element={<CapabilityRoute anyOf={["analytics:department", "analytics:all", "ticket:internal_ai"]}><AnalyticsDashboard /></CapabilityRoute>} />
     <Route path="/tickets" element={<Tickets />} />
     <Route path="/queue" element={<Tickets />} />
     <Route path="/escalations" element={<Tickets escalated />} />
@@ -61,13 +77,13 @@ export function Protected() {
     <Route path="/knowledge" element={<Knowledge />} />
     <Route path="/incidents" element={<Incidents />} />
     <Route path="/notifications" element={<Notifications />} />
-    <Route path="/ai" element={<RoleRoute roles={["support_agent", "team_lead", "system_admin"]}><AIMetrics /></RoleRoute>} />
-    <Route path="/reports" element={<RoleRoute roles={["knowledge_manager", "team_lead", "system_admin"]}><AIMetrics /></RoleRoute>} />
-    <Route path="/pipeline" element={<RoleRoute roles={["support_agent", "reviewer", "team_lead", "knowledge_manager", "system_admin", "auditor"]}><KnowledgePipeline /></RoleRoute>} />
-    <Route path="/audit" element={<RoleRoute roles={["auditor", "system_admin"]}><Audit /></RoleRoute>} />
-    <Route path="/integrations" element={<RoleRoute roles={["system_admin"]}><Integrations /></RoleRoute>} />
-    <Route path="/settings" element={<RoleRoute roles={["system_admin"]}><Planned title="Settings" /></RoleRoute>} />
-    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    <Route path="/ai" element={<CapabilityRoute anyOf={["ticket:internal_ai", "ai:monitor"]}><AIMetrics /></CapabilityRoute>} />
+    <Route path="/reports" element={<CapabilityRoute anyOf={["analytics:all", "knowledge:manage"]}><AIMetrics /></CapabilityRoute>} />
+    <Route path="/pipeline" element={<CapabilityRoute anyOf={["ticket:internal_ai", "knowledge:manage", "audit:read"]}><KnowledgePipeline /></CapabilityRoute>} />
+    <Route path="/audit" element={<CapabilityRoute anyOf={["audit:read"]}><Audit /></CapabilityRoute>} />
+    <Route path="/integrations" element={<CapabilityRoute anyOf={["integration:manage"]}><Integrations /></CapabilityRoute>} />
+    <Route path="/settings" element={<CapabilityRoute anyOf={["integration:manage", "policy:manage"]}><Integrations /></CapabilityRoute>} />
+    <Route path="*" element={<Navigate to={`/${publicExperience(user.role, user.public_role)}`} replace />} />
   </Routes></Shell>;
 }
 

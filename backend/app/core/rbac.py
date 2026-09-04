@@ -15,11 +15,11 @@ ROLE_ALIASES = {
 
 PERMISSIONS: dict[str, frozenset[str]] = {
     "customer": frozenset({"ticket:create", "ticket:read_own", "ticket:comment_public", "ticket:reopen", "ticket:close", "feedback:create"}),
-    "support_agent": frozenset({"ticket:read_department", "ticket:update", "ticket:internal_ai", "ticket:note_internal", "ticket:escalate", "knowledge:read"}),
-    "reviewer": frozenset({"ticket:read_department", "ticket:internal_ai", "review:manage", "knowledge:read"}),
-    "knowledge_manager": frozenset({"knowledge:read", "knowledge:manage", "knowledge:publish"}),
-    "team_lead": frozenset({"ticket:read_department", "ticket:update", "ticket:internal_ai", "ticket:assign", "ticket:escalate", "analytics:department", "knowledge:read"}),
-    "system_admin": frozenset({"user:manage", "tenant:configure", "integration:manage", "system:monitor", "audit:read"}),
+    "support_agent": frozenset({"ticket:read_department", "ticket:update", "ticket:internal_ai", "ticket:note_internal", "ticket:escalate", "knowledge:read", "message:internal", "diagnostic:manage"}),
+    "reviewer": frozenset({"ticket:read_department", "ticket:internal_ai", "review:manage", "ticket:assign", "ticket:escalate", "knowledge:read", "message:internal", "diagnostic:manage"}),
+    "knowledge_manager": frozenset({"knowledge:read", "knowledge:manage", "knowledge:publish", "knowledge:approve"}),
+    "team_lead": frozenset({"ticket:read_department", "ticket:update", "ticket:internal_ai", "ticket:assign", "ticket:escalate", "review:manage", "analytics:department", "knowledge:read", "message:internal", "diagnostic:manage", "assignment:override", "incident:manage", "analytics:all"}),
+    "system_admin": frozenset({"ticket:read_all", "ticket:update", "ticket:internal_ai", "ticket:assign", "ticket:escalate", "review:manage", "user:manage", "engineer:manage", "department:manage", "tenant:configure", "integration:manage", "system:monitor", "audit:read", "knowledge:manage", "knowledge:approve", "policy:manage", "message:internal", "diagnostic:manage", "assignment:override", "incident:manage", "analytics:all", "safe_action:execute"}),
     "auditor": frozenset({"audit:read", "compliance:export"}),
     # Legacy specialist role retained until its capabilities move to scoped permissions.
     "ai_admin": frozenset({"system:monitor", "ai:monitor"}),
@@ -36,3 +36,13 @@ def has_permission(role: str, permission: str) -> bool:
 
 def is_customer(role: str) -> bool:
     return canonical_role(role) == "customer"
+
+
+def public_role(role: str) -> str:
+    """Map compatibility roles to one of the three product experiences."""
+    canonical = canonical_role(role)
+    if canonical == "customer":
+        return "customer"
+    if canonical == "support_agent":
+        return "engineer"
+    return "admin"

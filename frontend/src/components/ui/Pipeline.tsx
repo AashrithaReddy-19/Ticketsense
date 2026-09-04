@@ -198,8 +198,8 @@ export function ExplainPipeline() {
         secondary context — it can help retrieval find the right articles, but it can never change which tenant or
         department is searched, and it is never itself cited as knowledge-base evidence.
       </p>
-      <pre className="pipeline-flow">START{"\n"}  → classify_node{"\n"}  → route_node{"\n"}  → retrieve_node{"\n"}  → draft_node{"\n"}  → validate_citations_node{"\n"}→ END</pre>
-      <p className="pipeline-caveat">This stage performs deterministic citation and evidence validation. It does not guarantee complete hallucination detection.</p>
+      <pre className="pipeline-flow">START{"\n"}  → intake_node{"\n"}  → attachment_or_text_node{"\n"}  → technical_entity_node{"\n"}  → classify_node{"\n"}  → priority_node{"\n"}  → route_node{"\n"}  → retrieve_node{"\n"}  → draft_node{"\n"}  → validate_citations_node{"\n"}  → validate_grounding_node{"\n"}  → confidence_node{"\n"}  → human_review_gate_node{"\n"}→ END</pre>
+      <p className="pipeline-caveat">Grounding checks are conservative deterministic safeguards. They identify common unsupported, contradictory and unsafe claims, but do not guarantee complete hallucination detection.</p>
     </div>
   );
 }

@@ -39,7 +39,8 @@ def test_insufficient_evidence_response_needs_no_citation():
 def test_graph_order():
     from ai.graph import graph
     edges={(edge.source,edge.target) for edge in graph.get_graph().edges}
-    assert {("__start__","classify"),("classify","route"),("route","retrieve"),("retrieve","draft"),("draft","validate_citations"),("validate_citations","__end__")} <= edges
+    ordered = ["__start__", "intake", "attachment_or_text", "technical_entity", "classify", "priority", "route", "retrieve", "draft", "validate_citations", "validate_grounding", "confidence", "human_review_gate", "__end__"]
+    assert {(before, after) for before, after in zip(ordered, ordered[1:])} == edges
 
 def test_provider_timeout_is_controlled(monkeypatch):
     class Slow:

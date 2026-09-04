@@ -62,10 +62,10 @@ async def isolation_matrix():
         ])
         await db.flush()
         db.add_all([
-            Ticket(id=own_ticket, tenant_id=tenant_a, submitted_by=customer_a, department_id=a_network, subject="Owned network ticket", description="Customer A owns this network support ticket.", status="in_review", priority="high", sentiment="neutral", review_required=True),
-            Ticket(id=same_tenant_other, tenant_id=tenant_a, submitted_by=customer_a_other, department_id=a_network, subject="Other customer network ticket", description="A different customer owns this support ticket.", status="in_review", priority="medium", sentiment="neutral", review_required=True),
-            Ticket(id=other_department, tenant_id=tenant_a, submitted_by=customer_a_other, department_id=a_cloud, subject="Cloud department ticket", description="This ticket belongs to the Cloud department.", status="in_review", priority="medium", sentiment="neutral", review_required=True),
-            Ticket(id=other_tenant, tenant_id=tenant_b, submitted_by=agent_b_network, department_id=b_network, subject="Other tenant network ticket", description="This ticket belongs to another tenant.", status="in_review", priority="medium", sentiment="neutral", review_required=True),
+            Ticket(id=own_ticket, tenant_id=tenant_a, submitted_by=customer_a, department_id=a_network, subject="Owned network ticket", description="Customer A owns this network support ticket.", status="pending_review", priority="high", sentiment="neutral", review_required=True),
+            Ticket(id=same_tenant_other, tenant_id=tenant_a, submitted_by=customer_a_other, department_id=a_network, subject="Other customer network ticket", description="A different customer owns this support ticket.", status="pending_review", priority="medium", sentiment="neutral", review_required=True),
+            Ticket(id=other_department, tenant_id=tenant_a, submitted_by=customer_a_other, department_id=a_cloud, subject="Cloud department ticket", description="This ticket belongs to the Cloud department.", status="pending_review", priority="medium", sentiment="neutral", review_required=True),
+            Ticket(id=other_tenant, tenant_id=tenant_b, submitted_by=agent_b_network, department_id=b_network, subject="Other tenant network ticket", description="This ticket belongs to another tenant.", status="pending_review", priority="medium", sentiment="neutral", review_required=True),
         ])
         await db.commit()
 
@@ -121,7 +121,7 @@ async def test_agent_department_and_tenant_isolation(matrix_client, isolation_ma
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.parametrize("suffix", ["", "/ai-analysis", "/evidence", "/similar", "/trace"])
+@pytest.mark.parametrize("suffix", ["", "/ai-analysis", "/evidence", "/similar", "/trace", "/pipeline-trace", "/technical-entities", "/explanation"])
 async def test_cross_tenant_get_endpoints_deny(matrix_client, isolation_matrix, suffix):
     other_tenant = isolation_matrix.ticket_ids[3]
     response = await matrix_client.get(

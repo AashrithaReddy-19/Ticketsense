@@ -12,7 +12,9 @@ from app.models.ticket_attachment import TicketAttachment
 from app.models.user import User
 from app.services.attachment_extraction import AttachmentValidationError,extractor,validate_upload
 from app.services.attachment_storage import storage
+from app.services.pipeline_metrics import StageTiming,persist_stage_timings
 from app.services.ticket_visibility import get_visible_ticket
+from uuid import uuid4
 
 router=APIRouter(prefix="/api/tickets",tags=["attachments"])
 async def parent(ticket_id,user,db):
@@ -59,7 +61,10 @@ async def process_attachment(ticket_id:str,user:User=Depends(get_current_user),d
     try:result=await asyncio.wait_for(asyncio.to_thread(extractor.extract,storage.read(row.storage_key),row.detected_mime_type),settings.attachment_extraction_timeout_seconds)
     except TimeoutError:
         row.status="failed";row.extraction_status="failed";row.error_code="extraction_timeout";row.error_summary="Extraction timed out";await db.commit();return public_meta(row,True)
-    row.extracted_text=result.raw_text;row.sanitized_text=result.sanitized_text;row.extraction_method=result.method;row.ocr_confidence=result.ocr_confidence;row.ocr_confidence_available=result.ocr_confidence is not None;row.page_count=result.page_count;row.character_count=result.character_count;row.truncated=result.truncated;row.processing_duration_ms=result.duration_ms;row.warnings=result.warnings;row.error_code=result.error_code;row.error_summary=result.error_summary;row.extraction_status=result.status;row.status="ready" if result.status in {"ready","empty"} else "failed";row.processed_at=datetime.now(timezone.utc);await db.commit();await db.refresh(row);return public_meta(row,True)
+    row.extracted_text=result.raw_text;row.sanitized_text=result.sanitized_text;row.extraction_method=result.method;row.ocr_confidence=result.ocr_confidence;row.ocr_confidence_available=result.ocr_confidence is not None;row.page_count=result.page_count;row.character_count=result.character_count;row.truncated=result.truncated;row.processing_duration_ms=result.duration_ms;row.warnings=result.warnings;row.error_code=result.error_code;row.error_summary=result.error_summary;row.extraction_status=result.status;row.status="ready" if result.status in {"ready","empty"} else "failed";row.processed_at=datetime.now(timezone.utc)
+    now=datetime.now(timezone.utc)
+    persist_stage_timings(db,ticket.tenant_id,ticket.id,uuid4(),[StageTiming(stage="ocr_extraction",started_at=now,ended_at=now,duration_ms=result.duration_ms,success=row.status=="ready",error_category=result.error_code,provider_version=result.method)])
+    await db.commit();await db.refresh(row);return public_meta(row,True)
 
 @router.get("/{ticket_id}/attachment/download")
 async def download_attachment(ticket_id:str,user:User=Depends(get_current_user),db:AsyncSession=Depends(get_db)):

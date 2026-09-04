@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, type Ticket } from "../api/client";
-import { Badge, Empty, ErrorState, Loading } from "../components/States";
+import { Badge, Empty, ErrorState, Loading, SyncIndicator } from "../components/States";
 import { useAuth } from "../auth/AuthContext";
 import { IconPlus } from "../components/icons";
 import { Button } from "../components/ui/Button";
 import { FilterBar, Pagination, SearchInput } from "../components/ui/Utility";
+import { useAutoRefresh } from "../lib/useAutoRefresh";
 
 const PAGE_SIZE = 10;
 
@@ -24,14 +25,15 @@ export default function Tickets({ escalated = false }: { escalated?: boolean }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function load() {
-    setLoading(true); setError("");
+  async function load(opts: { silent?: boolean } = {}) {
+    if (!opts.silent) { setLoading(true); setError(""); }
     try { setTickets(await api.tickets(q, status)); }
-    catch (e) { setError(e instanceof Error ? e.message : "Request failed"); }
-    finally { setLoading(false); }
+    catch (e) { if (!opts.silent) setError(e instanceof Error ? e.message : "Request failed"); else throw e; }
+    finally { if (!opts.silent) setLoading(false); }
   }
   useEffect(() => { load(); }, [location.search, escalated]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(1); }, [priority, sort, status]);
+  const { status: syncStatus, lastSyncedAt, retryNow } = useAutoRefresh(() => load({ silent: true }), undefined, !loading && !error);
 
   function search(e: FormEvent) { e.preventDefault(); navigate(`/tickets${q ? `?q=${encodeURIComponent(q)}` : ""}`); load(); }
   function clearFilters() { setQ(""); setStatus(escalated ? "escalated" : ""); setPriority(""); setSort("newest"); navigate("/tickets"); }
@@ -50,7 +52,10 @@ export default function Tickets({ escalated = false }: { escalated?: boolean }) 
     <div className="content">
       <div className="page-title">
         <div><h1>{escalated ? "Escalations" : "Tickets"}</h1><p>{escalated ? "Tickets requiring expert intervention." : internal ? "Search the authorized department queue." : "Track the support tickets you created."}</p></div>
-        <Button variant="primary" icon={<IconPlus size={15} />} onClick={() => navigate("/tickets/new")}>New ticket</Button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <SyncIndicator status={syncStatus} lastSyncedAt={lastSyncedAt} onRetry={retryNow} />
+          <Button variant="primary" icon={<IconPlus size={15} />} onClick={() => navigate("/tickets/new")}>New ticket</Button>
+        </div>
       </div>
 
       <FilterBar>
@@ -61,8 +66,12 @@ export default function Tickets({ escalated = false }: { escalated?: boolean }) 
         {!escalated && (
           <select value={status} onChange={e => setStatus(e.target.value)} aria-label="Filter by status">
             <option value="">All statuses</option>
-            <option value="open">Open</option>
-            <option value="in_review">In review</option>
+            <option value="submitted">Submitted</option>
+            <option value="routed">Routed</option>
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In progress</option>
+            <option value="pending_review">Pending review</option>
+            <option value="changes_requested">Changes requested</option>
             <option value="resolved">Resolved</option>
             <option value="escalated">Escalated</option>
           </select>

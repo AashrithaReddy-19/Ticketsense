@@ -16,6 +16,10 @@ class Settings(BaseSettings):
 
     llm_provider: str = "stub"
     llm_api_key: str = ""
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
+    llm_timeout_seconds: float = 30
+    llm_max_retries: int = 2
 
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384

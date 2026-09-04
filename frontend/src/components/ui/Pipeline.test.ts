@@ -3,7 +3,7 @@ import { buildPipelineStages } from "./Pipeline";
 import type { AttachmentMeta, GroundedDraft, Ticket } from "../../api/client";
 
 const baseTicket: Ticket = {
-  id: "t1", subject: "VPN issue", description: "Cannot connect", status: "in_review",
+  id: "t1", subject: "VPN issue", description: "Cannot connect", status: "pending_review",
   priority: "high", sentiment: "negative", department_id: "dept-1", confidence_score: 0.5,
   created_at: "2026-09-01T10:00:00Z", analysis: { category: "Networking", sla_risk: 20, decision_reason: "x" },
 };

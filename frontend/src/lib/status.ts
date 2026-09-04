@@ -9,14 +9,25 @@ export interface BadgeMeta { label: string; tone: Tone }
 
 const TICKET_STATUS: Record<string, BadgeMeta> = {
   submitted: { label: "Submitted", tone: "info" },
+  needs_clarification: { label: "Needs clarification", tone: "warning" },
+  ai_processing: { label: "AI processing", tone: "info" },
+  awaiting_assignment: { label: "Awaiting assignment", tone: "warning" },
+  processing: { label: "Processing", tone: "info" },
   classified: { label: "Classified", tone: "info" },
-  open: { label: "Open", tone: "info" },
-  in_review: { label: "In review", tone: "warning" },
   routed: { label: "Routed", tone: "violet" },
+  assigned: { label: "Assigned", tone: "violet" },
+  in_progress: { label: "In progress", tone: "info" },
+  awaiting_customer: { label: "Awaiting customer", tone: "warning" },
+  pending_review: { label: "Pending review", tone: "warning" },
+  changes_requested: { label: "Changes requested", tone: "warning" },
+  approved: { label: "Approved", tone: "success" },
   escalated: { label: "Escalated", tone: "danger" },
   resolved: { label: "Resolved", tone: "success" },
+  resolved_by_ai: { label: "Resolved by AI", tone: "success" },
+  resolved_by_engineer: { label: "Resolved by Engineer", tone: "success" },
+  ai_processing_failed: { label: "AI processing failed", tone: "danger" },
   closed: { label: "Closed", tone: "neutral" },
-  rejected: { label: "Rejected", tone: "danger" },
+  reopened: { label: "Reopened", tone: "warning" },
 };
 
 const PRIORITY: Record<string, BadgeMeta> = {

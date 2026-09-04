@@ -12,6 +12,7 @@ from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.platform import AuditLog, Organization
 from app.schemas.auth import Token, UserCreate, UserPublic
+from app.core.rbac import public_role
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 REFRESH_COOKIE = "ticketsense_refresh"
@@ -51,6 +52,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
         email=payload.email,
         full_name=payload.full_name,
         role="customer",
+        public_role="customer",
         tenant_id=tenant.id,
         hashed_password=hash_password(payload.password),
     )
@@ -141,4 +143,4 @@ async def logout_all(user: User = Depends(get_current_user), db: AsyncSession = 
 
 @router.get("/me", response_model=UserPublic)
 async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> UserPublic:
-    return UserPublic.model_validate(user).model_copy(update={"permissions": await _permissions(db, user)})
+    return UserPublic.model_validate(user).model_copy(update={"public_role": user.public_role or public_role(user.role), "permissions": await _permissions(db, user)})

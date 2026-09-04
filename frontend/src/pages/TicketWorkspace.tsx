@@ -1,31 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type Analysis, type AttachmentMeta, type Evidence, type GroundedDraft, type Ticket } from "../api/client";
+import { api, type Analysis, type AttachmentMeta, type DraftComparison, type EngineerSummary, type Evidence, type GroundedDraft, type PipelineTrace, type ResponseDraft, type TechnicalEntity, type Ticket, type TicketEvent, type TicketExplanation, type TicketMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { Badge, ErrorState, Loading } from "../components/States";
+import { Badge, ErrorState, Loading, SyncIndicator } from "../components/States";
 import { IconAlert, IconArrowLeft, IconCheckCircle, IconPaperclip, IconRefresh } from "../components/icons";
 import { Button } from "../components/ui/Button";
 import { CitationValidationBadge, ExtractionStatusBadge } from "../components/ui/Badges";
 import { EvidenceCard } from "../components/ui/Card";
-import { ConfirmDialog } from "../components/ui/Dialog";
+import { Modal } from "../components/ui/Dialog";
 import { Tabs, TabPanel } from "../components/ui/Tabs";
 import { Timeline } from "../components/ui/Utility";
 import { useToast } from "../components/ui/Toast";
 import { buildPipelineStages, ExplainPipeline, PipelineView } from "../components/ui/Pipeline";
+import { useAutoRefresh } from "../lib/useAutoRefresh";
 
 type Similar = { id: string; subject: string; status: string; similarity: number };
 type Trace = { action: string; detail: Record<string, unknown>; timestamp: string };
-type ActionName = "accept" | "escalate" | "reject" | "reopen";
-type PendingAction = { name: ActionName; label: string; description: string; variant: "primary" | "destructive" } | null;
 
 export default function TicketWorkspace() {
   const { id = "" } = useParams();
   const nav = useNavigate();
   const toast = useToast();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const internal = hasPermission("ai:view_summary");
   const canTransition = hasPermission("ticket:transition");
   const canMutate = hasPermission("ticket:transition") || hasPermission("ticket:review");
+  const canReview = hasPermission("ticket:review");
+  const canAssign = hasPermission("ticket:assign");
+  const canEngineer = hasPermission("ticket:transition") && !canReview;
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [analysis, setAnalysis] = useState<Analysis>({});
@@ -34,47 +36,77 @@ export default function TicketWorkspace() {
   const [trace, setTrace] = useState<Trace[]>([]);
   const [draft, setDraft] = useState<GroundedDraft | null>(null);
   const [attachment, setAttachment] = useState<AttachmentMeta | null>(null);
+  const [responseDrafts, setResponseDrafts] = useState<ResponseDraft[]>([]);
+  const [draftComparison, setDraftComparison] = useState<DraftComparison | null>(null);
+  const [pipelineTrace, setPipelineTrace] = useState<PipelineTrace | null>(null);
+  const [technicalEntities, setTechnicalEntities] = useState<TechnicalEntity[]>([]);
+  const [explanation, setExplanation] = useState<TicketExplanation | null>(null);
+  const [comparisonFrom, setComparisonFrom] = useState("");
+  const [comparisonTo, setComparisonTo] = useState("");
+  const [events, setEvents] = useState<TicketEvent[]>([]);
+  const [messages, setMessages] = useState<TicketMessage[]>([]);
+  const [messageBody, setMessageBody] = useState("");
+  const [internalNote, setInternalNote] = useState(false);
+  const [engineers, setEngineers] = useState<EngineerSummary[]>([]);
+  const [selectedEngineer, setSelectedEngineer] = useState("");
+  const [responseContent, setResponseContent] = useState("");
+  const [touchedResponse, setTouchedResponse] = useState(false);
+  const [touchedAssignment, setTouchedAssignment] = useState(false);
+  const [reviewAction, setReviewAction] = useState<"approve"|"modify_and_approve"|"request_changes"|"reject"|"escalate"|null>(null);
   const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState("");
-  const [pending, setPending] = useState<PendingAction>(null);
   const [reason, setReason] = useState("");
   const cards = useRef<Record<string, HTMLElement | null>>({});
 
-  async function load() {
-    setLoading(true); setError("");
+  async function load(opts: { silent?: boolean } = {}) {
+    if (!opts.silent) { setLoading(true); setError(""); }
     try {
       const t = await api.ticket(id);
       setTicket(t);
+      if (canAssign && t.department_id) {
+        const available = await api.departmentEngineers(t.department_id).catch(() => []);
+        setEngineers(available);
+        if (!touchedAssignment) setSelectedEngineer(t.assignee_id || "");
+      }
       const at = await api.attachment(id).catch(() => null);
       setAttachment(at);
+      setEvents(await api.timeline(id).catch(() => []));
+      setMessages(await api.messages?.(id).catch(() => []) || []);
       if (internal) {
-        const [a, e, s, tr, dr] = await Promise.all([
+        const [a, e, s, tr, dr, versions, persistedTrace, entities, why] = await Promise.all([
           api.analysis(id), api.evidence(id), api.similar(id), api.trace(id),
-          api.groundedDraft(id).catch(() => null),
+          api.groundedDraft(id).catch(() => null), api.drafts(id).catch(() => []),
+          api.pipelineTrace(id).catch(() => null), api.technicalEntities(id).catch(() => []), api.ticketExplanation(id).catch(() => null),
         ]);
-        setAnalysis(a); setEvidence(e); setSimilar(s); setTrace(tr); setDraft(dr);
+        setAnalysis(a); setEvidence(e); setSimilar(s); setTrace(tr); setDraft(dr); setResponseDrafts(versions);
+        setPipelineTrace(persistedTrace); setTechnicalEntities(entities); setExplanation(why);
+        setDraftComparison(await api.draftComparison(id).catch(() => null));
+        if (versions.length >= 2) { setComparisonFrom(String(versions[1].version_number)); setComparisonTo(String(versions[0].version_number)); }
+        if (!touchedResponse) setResponseContent(versions[0]?.content || dr?.draft_text || t.ai_draft_reply || "");
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "Unable to load ticket"); }
-    finally { setLoading(false); }
+    } catch (e) { if (!opts.silent) setError(e instanceof Error ? e.message : "Unable to load ticket"); else throw e; }
+    finally { if (!opts.silent) setLoading(false); }
   }
-  useEffect(() => { load(); }, [id, internal]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function runAction(name: ActionName) {
-    setActing(true); setError("");
-    try {
-      const updated = await api.ticketAction(id, { action: name, response: internal ? ticket?.ai_draft_reply || undefined : undefined, reason: reason.trim() || undefined });
-      setTicket(updated);
-      toast(`Ticket ${name === "accept" ? "approved and resolved" : name} successfully.`, "success");
-      if (internal) setTrace(await api.trace(id));
-    } catch (e) { toast(e instanceof Error ? e.message : "Action failed", "danger"); }
-    finally { setActing(false); setPending(null); setReason(""); }
-  }
+  function updateResponseContent(value: string) { setResponseContent(value); setTouchedResponse(true); }
+  function updateSelectedEngineer(value: string) { setSelectedEngineer(value); setTouchedAssignment(true); }
+
+  async function startWork() { setActing(true); try { await api.startWork(id); await load(); toast("Work started.","success"); } catch(e){toast(e instanceof Error?e.message:"Unable to start work","danger")} finally{setActing(false)} }
+  async function saveResponse() { setActing(true); try { await api.createResponseDraft(id,{content:responseContent,based_on_draft_id:responseDrafts[0]?.id}); setTouchedResponse(false); await load(); toast("Response saved as a new version.","success"); } catch(e){toast(e instanceof Error?e.message:"Unable to save response","danger")} finally{setActing(false)} }
+  async function submitResponse() { setActing(true); try { await api.submitForReview(id); await load(); toast("Response submitted for senior review.","success"); } catch(e){toast(e instanceof Error?e.message:"Unable to submit response","danger")} finally{setActing(false)} }
+  async function assignEngineer() { if(!selectedEngineer)return; setActing(true); try { await api.assignTicket(id,selectedEngineer,"Assigned from the ticket workspace."); setTouchedAssignment(false); await load(); toast("Engineer assignment synchronized.","success"); } catch(e){toast(e instanceof Error?e.message:"Unable to assign engineer","danger")} finally{setActing(false)} }
+  async function compareVersions() { if(!comparisonFrom||!comparisonTo)return; setActing(true); try { setDraftComparison(await api.draftComparison(id,Number(comparisonFrom),Number(comparisonTo))); } catch(e){toast(e instanceof Error?e.message:"Unable to compare versions","danger")} finally{setActing(false)} }
+  async function reviewResponse() { if(!reviewAction)return; setActing(true); try { await api.reviewResponse(id,{action:reviewAction,response_content:reviewAction==="modify_and_approve"?responseContent:undefined,review_comment:reason,customer_visible_note:reviewAction==="escalate"?"Your ticket has been escalated to a specialist.":undefined}); setReviewAction(null); setReason(""); setTouchedResponse(false); await load(); toast("Review decision synchronized.","success"); } catch(e){toast(e instanceof Error?e.message:"Review failed","danger")} finally{setActing(false)} }
+  async function sendMessage() { if(!messageBody.trim())return; setActing(true); try { await api.createMessage(id,{body:messageBody,visibility:internalNote?"internal":"public"});setMessageBody("");await load({silent:true});toast(internalNote?"Internal note saved.":"Message sent.","success")} catch(e){toast(e instanceof Error?e.message:"Unable to send message","danger")} finally{setActing(false)} }
+  async function confirmResolution(outcome:"solved"|"needs_help") { setActing(true); try { await api.confirmResolution(id,outcome,outcome==="needs_help"?"The proposed solution did not resolve the issue.":undefined);await load();toast(outcome==="solved"?"Resolution confirmed.":"Ticket reopened and routed to an Engineer.","success")} catch(e){toast(e instanceof Error?e.message:"Unable to save confirmation","danger")} finally{setActing(false)} }
+  useEffect(() => { load(); }, [id, internal]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { status: syncStatus, lastSyncedAt, retryNow } = useAutoRefresh(() => load({ silent: true }), undefined, !loading && !!ticket);
 
   async function generate() {
     setActing(true); setError("");
-    try { setDraft(await api.generateGroundedDraft(id)); toast("Grounded draft generated.", "success"); }
+    try { setDraft(await api.generateGroundedDraft(id)); await load(); toast("Grounded draft generated.", "success"); }
     catch (e) { toast(e instanceof Error ? e.message : "Generation unavailable", "danger"); }
     finally { setActing(false); }
   }
@@ -99,15 +131,8 @@ export default function TicketWorkspace() {
   if (!ticket) return null;
 
   const tabs = internal
-    ? [{ key: "overview", label: "Overview" }, { key: "analysis", label: "Analysis" }, { key: "evidence", label: "Evidence" }, { key: "similar", label: "Similar tickets" }, { key: "trace", label: "Trace" }, { key: "pipeline", label: "Pipeline" }]
+    ? [{ key: "overview", label: "Overview" }, { key: "analysis", label: "Analysis" }, { key: "technical", label: "Technical information" }, { key: "explain", label: "Why this decision?" }, { key: "evidence", label: "Evidence" }, { key: "similar", label: "Similar tickets" }, { key: "trace", label: "Trace" }, { key: "pipeline", label: "Pipeline" }]
     : [{ key: "overview", label: "Overview" }];
-
-  const actionDefs: Record<string, PendingAction> = {
-    accept: { name: "accept", label: "Approve & resolve", description: "This marks the ticket resolved and shares the current response with the customer.", variant: "primary" },
-    escalate: { name: "escalate", label: "Escalate", description: "This routes the ticket to expert escalation handling.", variant: "destructive" },
-    reject: { name: "reject", label: "Reject recommendation", description: "This rejects the current recommendation and escalates the ticket for further review.", variant: "destructive" },
-    reopen: { name: "reopen", label: "Reopen ticket", description: "This reopens a resolved ticket so it can be worked again.", variant: "primary" },
-  };
 
   return (
     <div className="content workspace">
@@ -116,7 +141,7 @@ export default function TicketWorkspace() {
 
       <div className="workspace-head">
         <div><small>Ticket {ticket.id}</small><h1>{ticket.subject}</h1><p>Created {new Date(ticket.created_at).toLocaleString()}{ticket.updated_at ? ` · Updated ${new Date(ticket.updated_at).toLocaleString()}` : ""}</p></div>
-        <div><Badge value={ticket.priority} /><Badge value={ticket.status} /></div>
+        <div><SyncIndicator status={syncStatus} lastSyncedAt={lastSyncedAt} onRetry={retryNow} /><Badge value={ticket.priority} /><Badge value={ticket.status} /></div>
       </div>
 
       <div className="workspace-grid">
@@ -125,7 +150,9 @@ export default function TicketWorkspace() {
           <Meta label="Status" value={ticket.status} />
           <Meta label="Priority" value={ticket.priority || "—"} />
           <Meta label="Sentiment" value={ticket.sentiment || "—"} />
-          <Meta label="Department" value={ticket.department_id || "Not assigned"} />
+          <Meta label="Department" value={ticket.department_name || "Not assigned"} />
+          {ticket.assignee_id && <Meta label="Assigned engineer" value={ticket.assignee_id===user?.id?"You":"Assigned support engineer"} />}
+          {canAssign && ticket.department_id && !["resolved","closed"].includes(ticket.status) && <div className="assignment-control"><label className="ui-field"><span>Assign engineer</span><select value={selectedEngineer} onChange={event=>updateSelectedEngineer(event.target.value)}><option value="">Select an active engineer</option>{engineers.map(engineer=><option key={engineer.id} value={engineer.id}>{engineer.full_name} ({engineer.active_tickets ?? 0} active)</option>)}</select></label><Button size="sm" variant="outline" disabled={!selectedEngineer} loading={acting} onClick={assignEngineer}>Save assignment</Button></div>}
           {internal && <>
             <Meta label="Category" value={String(analysis.category || "Unclassified")} />
             <Meta label="SLA risk" value={`${analysis.sla_risk || 0}%`} />
@@ -139,12 +166,19 @@ export default function TicketWorkspace() {
           <TabPanel id="workspace" tabKey="overview" active={tab}>
             <h3>Customer request</h3>
             <p className="description">{ticket.description}</p>
+            <section className="ticket-conversation" aria-labelledby="conversation-heading">
+              <div className="draft-heading"><div><h3 id="conversation-heading">Conversation</h3><p>Public replies are shared with the customer. Internal notes remain staff-only.</p></div></div>
+              <div className="message-thread">{messages.length?messages.map(message=><article className={`ticket-message ${message.visibility}`} key={message.id}><div><b>{message.author_name}</b><Badge value={message.visibility}/></div><p className="preserve-lines">{message.body}</p><small>{new Date(message.created_at).toLocaleString()}{message.machine_translated?" · machine translated":""}</small></article>):<p className="empty-note">No messages yet.</p>}</div>
+              <label className="ui-field"><span>{internalNote?"Internal note":"Public reply"}</span><textarea rows={3} value={messageBody} onChange={event=>setMessageBody(event.target.value)} placeholder={internalNote?"Visible only to authorized staff":"Write a message about this ticket"}/></label>
+              <div className="form-actions">{internal&&<label className="message-visibility"><input type="checkbox" checked={internalNote} onChange={event=>setInternalNote(event.target.checked)}/> Private internal note</label>}<Button size="sm" variant="primary" disabled={!messageBody.trim()} loading={acting} onClick={sendMessage}>Send</Button></div>
+            </section>
             {!internal && <>
               <CustomerAttachment attachment={attachment} />
-              {ticket.ai_draft_reply && <section className="customer-response"><h3>Support response</h3><p>{ticket.ai_draft_reply}</p></section>}
+              {ticket.final_response && <section className="customer-response"><h3>{ticket.resolution_type==="ai"?"Verified AI resolution":"Support response"}</h3><p className="preserve-lines">{ticket.final_response}</p>{ticket.final_responder_name&&<small>Provided by {ticket.final_responder_name}</small>}{ticket.resolved_at&&<small>Resolved {new Date(ticket.resolved_at).toLocaleString()}</small>}{["resolved","resolved_by_ai","resolved_by_engineer"].includes(ticket.status)&&<div className="resolution-confirm"><b>Did this solve your issue?</b><div className="form-actions"><Button size="sm" variant="primary" loading={acting} onClick={()=>confirmResolution("solved")}>Yes, close ticket</Button><Button size="sm" variant="outline" loading={acting} onClick={()=>confirmResolution("needs_help")}>I still need help</Button></div></div>}</section>}
+              {ticket.status==="escalated"&&<div className="info-box">{ticket.public_status_message||"Your ticket has been escalated to a specialist."}</div>}
               <section className="customer-timeline">
                 <h3>Ticket progress</h3>
-                <Timeline steps={customerTimeline(ticket)} />
+                <Timeline steps={events.length?events.map((event,index)=>({key:event.id,label:(event.comment||event.event_type).replaceAll("_"," "),done:index<events.length-1,active:index===events.length-1,timestamp:event.created_at})):customerTimeline(ticket)} />
               </section>
             </>}
             {internal && <>
@@ -182,6 +216,15 @@ export default function TicketWorkspace() {
                   </div>
                 </div>
               )}
+              {canEngineer && <section className="response-editor">
+                <div className="draft-heading"><div><h3>Engineer response</h3><p>Saved versions remain internal until senior approval.</p></div>{responseDrafts[0]&&<Badge value={responseDrafts[0].status}/>}</div>
+                {responseDrafts[0]?.citation_validation_status==="invalid"&&<div className="error-box" role="alert"><IconAlert size={14}/>This response version is blocked by citation or grounding validation. Correct it and save a new version before review.</div>}
+                {responseDrafts[0]?.validation?.grounding?.overall_status==="Partially Grounded"&&<div className="validation-warnings" role="status">Grounding is partial. Investigation and reviewer attention are mandatory.</div>}
+                {ticket.status==="assigned"&&<Button variant="primary" onClick={startWork} loading={acting}>Start work</Button>}
+                {["in_progress","changes_requested"].includes(ticket.status)&&<><label className="ui-field"><span>Response draft</span><textarea rows={10} value={responseContent} onChange={e=>updateResponseContent(e.target.value)} /></label><div className="form-actions"><Button variant="outline" onClick={saveResponse} loading={acting}>Save new version</Button>{responseDrafts[0]?.status==="engineer_edited"&&<Button variant="primary" onClick={submitResponse} loading={acting}>Submit for review</Button>}</div></>}
+              </section>}
+              {responseDrafts.length>0&&<section className="draft-history"><h3>Response version history</h3>{responseDrafts.map(version=><article key={version.id}><b>Version {version.version_number}</b><Badge value={version.status}/><small>{version.author_type} · {new Date(version.created_at).toLocaleString()}</small></article>)}</section>}
+              {draftComparison&&<section className="version-comparison"><div className="draft-heading"><div><h3>Response comparison</h3><p>Version {draftComparison.from_version} ({draftComparison.from_author_type}) to version {draftComparison.to_version} ({draftComparison.to_author_type})</p></div><Badge value={`${draftComparison.edit_percentage}% edited`}/></div><div className="comparison-controls"><label className="ui-field"><span>Earlier version</span><select value={comparisonFrom} onChange={event=>setComparisonFrom(event.target.value)}>{responseDrafts.slice().reverse().map(version=><option key={version.id} value={version.version_number}>Version {version.version_number} · {version.author_type}</option>)}</select></label><label className="ui-field"><span>Later version</span><select value={comparisonTo} onChange={event=>setComparisonTo(event.target.value)}>{responseDrafts.slice().reverse().map(version=><option key={version.id} value={version.version_number}>Version {version.version_number} · {version.author_type}</option>)}</select></label><Button size="sm" variant="outline" loading={acting} onClick={compareVersions}>Compare</Button></div><div className="comparison-summary"><span><b>+{draftComparison.added_word_count}</b> words added</span><span><b>-{draftComparison.removed_word_count}</b> words removed</span><span><b>{draftComparison.citations_added.length + draftComparison.citations_removed.length}</b> citation changes</span></div>{draftComparison.changes.length===0?<p className="empty-note">The response text is unchanged.</p>:draftComparison.changes.map((change,index)=><div className="comparison-change" key={`${change.operation}-${index}`}><Badge value={change.operation}/>{change.before&&<p><del>{change.before}</del></p>}{change.after&&<p><ins>{change.after}</ins></p>}</div>)}</section>}
             </>}
           </TabPanel>
 
@@ -189,6 +232,17 @@ export default function TicketWorkspace() {
             <h3>AI analysis</h3>
             <Meta label="Decision" value={String(analysis.decision || "—").replaceAll("_", " ")} />
             <Meta label="Reason" value={String(analysis.decision_reason || "—")} />
+          </TabPanel>
+
+          <TabPanel id="workspace" tabKey="technical" active={tab}>
+            <h3>Technical Information</h3>
+            <p className="empty-note">Deterministically extracted values are predictions for staff verification.</p>
+            {technicalEntities.length?<div className="entity-grid">{technicalEntities.map(entity=><article className="entity-card" key={entity.id}><div><b>{entity.entity_type.replaceAll("_"," ")}</b><Badge value={entity.validation_status}/></div><strong>{entity.normalized_value}</strong><small>{entity.source} · {Math.round(entity.confidence*100)}% rule confidence</small></article>)}</div>:<p className="empty-note">No technical entities recorded. Generate a grounded draft to run Release B processing.</p>}
+          </TabPanel>
+
+          <TabPanel id="workspace" tabKey="explain" active={tab}>
+            <h3>Why did TicketSense make this decision?</h3>
+            {!explanation?<p className="empty-note">No persisted explanation is available.</p>:<div className="explain-grid"><Meta label="Predicted category" value={explanation.predicted_category||"Not available"}/><Meta label="Predicted priority" value={explanation.predicted_priority||"Not available"}/><Meta label="Routing reason" value={explanation.routing_reason||"Not available"}/><Meta label="Assignment reason" value={explanation.assignment_reason||"Not available"}/><Meta label="Top evidence similarity" value={explanation.top_retrieval_similarity==null?"Not available":`${Math.round(explanation.top_retrieval_similarity*100)}%`}/><Meta label="Retrieval score gap" value={explanation.retrieval_score_gap==null?"Not available":explanation.retrieval_score_gap.toFixed(3)}/><Meta label="Valid evidence sources" value={String(explanation.valid_evidence_count)}/><Meta label="Confidence band" value={explanation.confidence_band||"Not available"}/><Meta label="Grounding result" value={explanation.grounding_status||"Not available"}/><Meta label="Human-review decision" value={explanation.human_review_decision||"Not available"}/><div className="factor-list"><b>Positive factors</b>{explanation.positive_factors.length?explanation.positive_factors.map(item=><span key={item}>{item}</span>):<span>Not available</span>}</div><div className="factor-list"><b>Risk factors</b>{explanation.risk_factors.length?explanation.risk_factors.map(item=><span key={item}>{item}</span>):<span>None recorded</span>}</div><small className="explain-disclaimer">{explanation.disclaimer}</small></div>}
           </TabPanel>
 
           <TabPanel id="workspace" tabKey="evidence" active={tab}>
@@ -211,8 +265,8 @@ export default function TicketWorkspace() {
 
           <TabPanel id="workspace" tabKey="pipeline" active={tab}>
             <h3>AI processing pipeline</h3>
-            <p className="empty-note">Every stage's status is read directly from this ticket's real data — nothing here is simulated.</p>
-            <PipelineView stages={buildPipelineStages({ ticket, attachment, analysis, draft, traceCount: trace.length, canMutate, canTransition })} />
+            <p className="empty-note">Persisted Release B execution data is shown when available; no latency is simulated.</p>
+            {!pipelineTrace?.execution?<><p className="empty-note">No persisted execution exists yet.</p><PipelineView stages={buildPipelineStages({ ticket, attachment, analysis, draft, traceCount: trace.length, canMutate, canTransition })}/></>:<><div className="pipeline-execution-head"><Badge value={pipelineTrace.execution.status}/><span>{pipelineTrace.execution.pipeline_version}</span><span>{pipelineTrace.execution.total_duration_ms??"—"} ms total</span></div><div className="persisted-pipeline">{pipelineTrace.stages.map(stage=><details key={stage.id} className="pipeline-stage-row"><summary><b>{stage.sequence_number}. {stage.stage_name.replaceAll("_"," ")}</b><Badge value={stage.fallback_used?"fallback":stage.status}/><span>{stage.duration_ms} ms</span></summary><p>{stage.output_summary||"No safe output summary"}</p><small>{stage.provider_name||"rule"} · {stage.provider_version||"version unavailable"}{stage.safe_error_summary?` · ${stage.safe_error_summary}`:""}</small></details>)}</div>{pipelineTrace.claims.length>0&&<section className="claim-validation"><h3>Grounding validation</h3>{pipelineTrace.claims.map((claim,index)=><article key={index}><Badge value={claim.validation_status}/><p>{claim.claim_text}</p><small>{claim.reason}{claim.citation_id?` · ${claim.citation_id}`:""}</small></article>)}</section>}</>}
             <ExplainPipeline />
           </TabPanel>
         </section>
@@ -222,11 +276,13 @@ export default function TicketWorkspace() {
             <h2>✦ AI Intelligence</h2>
             <div className="confidence-large"><b>{Math.round((ticket.confidence_score || 0) * 100)}%</b><span>confidence</span></div>
             <p>{String(analysis.decision_reason || "Awaiting backend decision.")}</p>
-            {canTransition && ticket.status !== "resolved" && (
+            {canReview && ticket.status === "pending_review" && (
               <div className="action-stack">
-                <Button variant="primary" disabled={acting} onClick={() => setPending(actionDefs.accept)}><IconCheckCircle size={15} />Approve & resolve</Button>
-                <Button variant="outline" disabled={acting} onClick={() => setPending(actionDefs.escalate)}>Escalate</Button>
-                <Button variant="outline" disabled={acting} onClick={() => setPending(actionDefs.reject)}>Reject recommendation</Button>
+                <Button variant="primary" disabled={acting} onClick={() => {setReviewAction("approve");setReason("")}}><IconCheckCircle size={15} />Approve</Button>
+                <Button variant="outline" disabled={acting} onClick={() => {setReviewAction("modify_and_approve");setReason("")}}>Modify & approve</Button>
+                <Button variant="outline" disabled={acting} onClick={() => {setReviewAction("request_changes");setReason("")}}>Request changes</Button>
+                <Button variant="outline" disabled={acting} onClick={() => {setReviewAction("reject");setReason("")}}>Reject draft</Button>
+                <Button variant="destructive" disabled={acting} onClick={() => {setReviewAction("escalate");setReason("")}}>Escalate</Button>
               </div>
             )}
           </aside>
@@ -234,36 +290,33 @@ export default function TicketWorkspace() {
           <aside className="panel ai-panel">
             <h2>Ticket progress</h2>
             <p>Your support team is reviewing this request. Internal analysis, confidence and staff notes remain protected.</p>
-            {ticket.status === "resolved" && <Button variant="primary" disabled={acting} onClick={() => setPending(actionDefs.reopen)} icon={<IconRefresh size={15} />}>Reopen ticket</Button>}
+            {["resolved","resolved_by_ai","resolved_by_engineer"].includes(ticket.status) && ticket.final_response && <Button variant="primary" disabled={acting} onClick={() => confirmResolution("needs_help")} icon={<IconRefresh size={15} />}>I still need help</Button>}
           </aside>
         )}
       </div>
 
-      <ConfirmDialog
-        open={!!pending}
-        onClose={() => { setPending(null); setReason(""); }}
-        onConfirm={() => pending && runAction(pending.name)}
-        title={pending?.label || ""}
-        description={pending?.description || ""}
-        confirmLabel={pending?.label || "Confirm"}
-        variant={pending?.variant}
-        busy={acting}
-        requireReason={pending?.name === "escalate" || pending?.name === "reject"}
-        reason={reason}
-        onReasonChange={setReason}
-      />
+      <Modal open={!!reviewAction} onClose={()=>{setReviewAction(null);setReason("")}} title={(reviewAction||"").replaceAll("_"," ")} description="The decision and comment are saved to the shared ticket history." footer={<><Button variant="outline" onClick={()=>setReviewAction(null)}>Cancel</Button><Button variant={reviewAction==="reject"||reviewAction==="escalate"?"destructive":"primary"} disabled={reason.trim().length<3} loading={acting} onClick={reviewResponse}>Confirm decision</Button></>}>
+        {reviewAction==="modify_and_approve"&&<label className="ui-field"><span>Modified response <em>required</em></span><textarea rows={10} value={responseContent} onChange={e=>updateResponseContent(e.target.value)} /></label>}
+        <label className="ui-field"><span>Review comment <em>required</em></span><textarea rows={4} value={reason} onChange={e=>setReason(e.target.value)} /></label>
+      </Modal>
     </div>
   );
 }
 
 export function customerTimeline(ticket: Ticket) {
-  const order = ["open", "in_review", "escalated", "resolved", "closed"];
-  const current = Math.max(0, order.indexOf(ticket.status));
-  const labels = ["Submitted", "In review", "Escalated", "Resolved", "Closed"];
-  return labels.map((label, index) => ({
-    key: order[index], label,
-    done: index < current || (index === current && ["resolved", "closed"].includes(ticket.status)),
-    active: index === current && !["resolved", "closed"].includes(ticket.status),
+  const normalized = ticket.status === "escalated" ? "pending_review" : ticket.status;
+  const stages = [
+    { key: "submitted", label: "Submitted", statuses: ["submitted", "needs_clarification", "ai_processing", "processing", "classified", "routed", "ai_processing_failed"] },
+    { key: "assigned", label: "Assigned", statuses: ["awaiting_assignment", "assigned", "in_progress", "awaiting_customer", "reopened"] },
+    { key: "pending_review", label: "Under review", statuses: ["pending_review", "changes_requested", "escalated"] },
+    { key: "resolved", label: "Resolved", statuses: ["approved", "resolved", "resolved_by_ai", "resolved_by_engineer"] },
+    { key: "closed", label: "Closed", statuses: ["closed"] },
+  ];
+  const current = Math.max(0, stages.findIndex(stage => stage.statuses.includes(normalized)));
+  return stages.map((stage, index) => ({
+    key: stage.key, label: stage.label,
+    done: index < current || (index === current && ["resolved", "resolved_by_ai", "resolved_by_engineer", "closed"].includes(ticket.status)),
+    active: index === current && !["resolved", "resolved_by_ai", "resolved_by_engineer", "closed"].includes(ticket.status),
     timestamp: index === 0 ? ticket.created_at : index === current ? ticket.updated_at : undefined,
   }));
 }
@@ -308,7 +361,7 @@ export function Status({ draft }: { draft: GroundedDraft }) {
 }
 
 export function renderDraft(text: string, locate: (id: string) => void) {
-  return <>{text.split(/(\[KB-\d{3}\])/g).map((p, i) => /^\[KB-\d{3}\]$/.test(p)
+  return <>{text.split(/(\[(?:KB|RT)-\d{3}\])/g).map((p, i) => /^\[(?:KB|RT)-\d{3}\]$/.test(p)
     ? <button className="citation-link" key={i} onClick={() => locate(p.slice(1, -1))}>{p}</button>
     : p)}</>;
 }

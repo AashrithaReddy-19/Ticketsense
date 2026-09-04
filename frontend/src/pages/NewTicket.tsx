@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, type DescriptionSuggestion } from "../api/client";
 import { IconArrowLeft } from "../components/icons";
 import { Button } from "../components/ui/Button";
 import { TextArea, TextInput } from "../components/ui/Form";
@@ -30,6 +30,18 @@ export default function NewTicket() {
   const [severity, setSeverity] = useState("");
   const [environment, setEnvironment] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [assisting, setAssisting] = useState(false);
+  const [suggestion, setSuggestion] = useState<DescriptionSuggestion | null>(null);
+  const [suggestedText, setSuggestedText] = useState("");
+
+  async function improveDescription() {
+    setAssisting(true); setError("");
+    try {
+      const result = await api.assistDescription(subject, description);
+      setSuggestion(result); setSuggestedText(result.suggested);
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to improve the description."); }
+    finally { setAssisting(false); }
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -38,6 +50,7 @@ export default function NewTicket() {
     try {
       const ticket = await api.createTicket({ subject, description, category, product, severity, environment, error_message: errorMessage });
       if (file) await api.uploadAttachment(ticket.id, file);
+      try { await api.processTicket(ticket.id); } catch { /* The stored ticket remains available for human support if AI processing fails. */ }
       nav(`/tickets/${ticket.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to create ticket. Your entered details were kept — please try again.");
@@ -64,6 +77,16 @@ export default function NewTicket() {
           placeholder="What happened, what you expected, and any error text or steps to reproduce."
           hint={`${description.length}/${DESCRIPTION_MAX} characters`}
         />
+        <div className="description-assistant-actions">
+          <Button type="button" variant="outline" loading={assisting} disabled={subject.trim().length < 4 || description.trim().length < 10} onClick={improveDescription}>Improve description</Button>
+          <small>The assistant suggests clearer wording but never changes or submits your text automatically.</small>
+        </div>
+        {suggestion && <section className="description-suggestion" aria-live="polite">
+          <div><h3>Suggested description</h3><small>Review and edit before accepting.</small></div>
+          <TextArea label="Editable suggestion" rows={7} value={suggestedText} maxLength={DESCRIPTION_MAX} onChange={e=>setSuggestedText(e.target.value)} hint={`${suggestedText.length}/${DESCRIPTION_MAX} characters`} />
+          {suggestion.missing_information_questions.length > 0 && <div className="missing-information"><b>Details that could help support</b><ul>{suggestion.missing_information_questions.map(question=><li key={question}>{question}</li>)}</ul></div>}
+          <div className="form-actions"><Button type="button" variant="primary" disabled={suggestedText.trim().length < 10} onClick={()=>{setDescription(suggestedText);setSuggestion(null)}}>Accept suggestion</Button><Button type="button" variant="outline" onClick={()=>setSuggestion(null)}>Keep original</Button></div>
+        </section>}
         <div className="form-row">
           <TextInput label="Category" hint="Optional — AI can infer this" value={category} onChange={e => setCategory(e.target.value)} />
           <TextInput label="Product" value={product} onChange={e => setProduct(e.target.value)} />

@@ -1,15 +1,23 @@
 from app.models.base import Base
 from app.models.ai_draft import AIDraft
 from app.models.department import Department
-from app.models.embedding import Embedding
+from app.models.embedding import Embedding, TicketResolutionEmbedding
 from app.models.escalation import Escalation
 from app.models.feedback import Feedback
 from app.models.knowledge_base import KnowledgeBaseDocument
 from app.models.ticket import Ticket
 from app.models.ticket_attachment import TicketAttachment
+from app.models.response_draft import ResponseDraft, TicketEvent, EngineerDepartment, EngineerSpecialization
+from app.models.operations import DepartmentConfidencePolicy, PipelineMetric
+from app.models.ai_pipeline import PipelineExecution, PipelineStage, TechnicalEntity, ClaimValidation
 from app.models.ticket_history import TicketHistory
 from app.models.user import User
 from app.models.platform import AIDecision, AuditLog, Incident, Integration, KnowledgeArticle, Notification, Organization, SLAPolicy
+from app.models.enterprise import (
+    AssignmentDecision, ConfidenceComponent, DepartmentResolutionPolicy, DiagnosticPlan,
+    DiagnosticStep, EngineerProfile, EngineerSkill, ResolutionConfirmation,
+    TicketDecision, TicketMessage, TicketMessageRead,
+)
 
 __all__ = [
     "Base",
@@ -21,7 +29,12 @@ __all__ = [
     "TicketHistory",
     "KnowledgeBaseDocument",
     "Embedding",
+    "TicketResolutionEmbedding",
     "Feedback",
     "Escalation",
+    "PipelineExecution", "PipelineStage", "TechnicalEntity", "ClaimValidation",
     "Organization", "AuditLog", "Notification", "Incident", "KnowledgeArticle", "SLAPolicy", "Integration", "AIDecision",
+    "EngineerProfile", "EngineerSkill", "DepartmentResolutionPolicy", "TicketDecision",
+    "ConfidenceComponent", "AssignmentDecision", "TicketMessage", "TicketMessageRead",
+    "ResolutionConfirmation", "DiagnosticPlan", "DiagnosticStep",
 ]

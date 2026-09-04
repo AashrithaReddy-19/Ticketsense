@@ -1,4 +1,5 @@
 import { describeBadge } from "../lib/status";
+import type { SyncStatus } from "../lib/useAutoRefresh";
 import { IconAlertCircle, IconInbox, IconLock, IconRefresh, IconWifi } from "./icons";
 import { Button } from "./ui/Button";
 import { Skeleton } from "./ui/Utility";
@@ -44,6 +45,16 @@ export function Empty({ label = "No tickets found.", action }: { label?: string;
       {action}
     </div>
   );
+}
+
+/** Shows whether this view's data is being kept in sync with the database (the
+ * single source of truth) via background polling — never implies an optimistic,
+ * unconfirmed update. */
+export function SyncIndicator({ status, lastSyncedAt, onRetry }: { status: SyncStatus; lastSyncedAt: number | null; onRetry?: () => void }) {
+  if (status === "error") return <span className="sync-indicator sync-indicator-error" role="status"><IconWifi size={13} />Reconnecting…{onRetry && <button type="button" className="sync-retry" onClick={onRetry}>Retry now</button>}</span>;
+  if (status === "syncing" && !lastSyncedAt) return <span className="sync-indicator" role="status"><span className="spinner spinner-sm" aria-hidden="true" />Syncing…</span>;
+  if (!lastSyncedAt) return null;
+  return <span className="sync-indicator sync-indicator-live" role="status"><span className="sync-dot" aria-hidden="true" />Live · updated {new Date(lastSyncedAt).toLocaleTimeString()}</span>;
 }
 
 /** Auto-detecting status pill kept for backward compatibility — every existing page calls

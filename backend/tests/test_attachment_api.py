@@ -60,8 +60,8 @@ async def attachment_fixture():
         ])
         await db.flush()
         db.add_all([
-            Ticket(id=ticket_a, tenant_id=tenant_a, submitted_by=customer_a, department_id=dept_a_network, subject="VPN fails after reset", description="VPN authentication fails after a password reset.", status="in_review", priority="medium", sentiment="neutral", review_required=True),
-            Ticket(id=ticket_b, tenant_id=tenant_b, submitted_by=agent_b_network, department_id=dept_b_network, subject="Other tenant ticket", description="Belongs to another tenant entirely.", status="in_review", priority="medium", sentiment="neutral", review_required=True),
+            Ticket(id=ticket_a, tenant_id=tenant_a, submitted_by=customer_a, department_id=dept_a_network, subject="VPN fails after reset", description="VPN authentication fails after a password reset.", status="pending_review", priority="medium", sentiment="neutral", review_required=True),
+            Ticket(id=ticket_b, tenant_id=tenant_b, submitted_by=agent_b_network, department_id=dept_b_network, subject="Other tenant ticket", description="Belongs to another tenant entirely.", status="pending_review", priority="medium", sentiment="neutral", review_required=True),
         ])
         await db.commit()
 

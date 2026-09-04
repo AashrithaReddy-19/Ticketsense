@@ -22,10 +22,10 @@ const labels: Record<string, string> = {
 const navByRole: Record<string, Array<[string, IconType, string]>> = {
   customer: [["/dashboard", IconDashboard, "Overview"], ["/tickets", IconQueue, "My Tickets"], ["/knowledge", IconKnowledge, "Knowledge"], ["/notifications", IconBell, "Notifications"]],
   support_agent: [["/agent", IconDashboard, "Command Center"], ["/queue", IconQueue, "My Queue"], ["/ai", IconSparkle, "AI Intelligence"], ["/pipeline", IconLayers, "AI Pipeline"], ["/knowledge", IconKnowledge, "Knowledge"], ["/escalations", IconAlert, "Escalations"]],
-  reviewer: [["/review", IconQueue, "Review Queue"], ["/pipeline", IconLayers, "AI Pipeline"], ["/knowledge", IconKnowledge, "Knowledge"], ["/notifications", IconBell, "Notifications"]],
+  reviewer: [["/review", IconQueue, "Review Queue"], ["/analytics", IconChart, "Analytics"], ["/pipeline", IconLayers, "AI Pipeline"], ["/knowledge", IconKnowledge, "Knowledge"], ["/notifications", IconBell, "Notifications"]],
   knowledge_manager: [["/knowledge", IconKnowledge, "Documents"], ["/queue", IconQueue, "Approval Queue"], ["/pipeline", IconLayers, "AI Pipeline"], ["/reports", IconAlert, "Knowledge Gaps"]],
-  team_lead: [["/operations", IconDashboard, "Team Operations"], ["/reports", IconChart, "SLA Analytics"], ["/pipeline", IconLayers, "AI Pipeline"], ["/incidents", IconAlert, "Incidents"], ["/knowledge", IconKnowledge, "Knowledge Gaps"]],
-  system_admin: [["/admin", IconDashboard, "Administration"], ["/integrations", IconPlug, "Integrations"], ["/pipeline", IconLayers, "AI Pipeline"], ["/audit", IconShield, "Audit Logs"], ["/settings", IconSettings, "Settings"]],
+  team_lead: [["/operations", IconDashboard, "Team Operations"], ["/analytics", IconChart, "Analytics"], ["/reports", IconChart, "SLA Analytics"], ["/pipeline", IconLayers, "AI Pipeline"], ["/incidents", IconAlert, "Incidents"], ["/knowledge", IconKnowledge, "Knowledge Gaps"]],
+  system_admin: [["/admin", IconDashboard, "Administration"], ["/analytics", IconChart, "Analytics"], ["/integrations", IconPlug, "Integrations"], ["/pipeline", IconLayers, "AI Pipeline"], ["/audit", IconShield, "Audit Logs"], ["/settings", IconSettings, "Settings"]],
   auditor: [["/audit", IconShield, "Audit Logs"], ["/pipeline", IconLayers, "AI Pipeline"], ["/notifications", IconBell, "Compliance Events"]],
   ai_admin: [["/dashboard", IconSparkle, "AI Overview"], ["/ai", IconChart, "Agent Performance"], ["/reports", IconKnowledge, "Evaluations"], ["/settings", IconSettings, "Configuration"]],
 };
@@ -38,12 +38,29 @@ const aliases: Record<string, string> = {
 const sectionLabels: Record<string, string> = {
   dashboard: "Overview", portal: "Overview", agent: "Command Center", queue: "Queue", review: "Review Queue",
   operations: "Team Operations", admin: "Administration", tickets: "Tickets", knowledge: "Knowledge",
-  incidents: "Incidents", notifications: "Notifications", ai: "AI Intelligence", reports: "Reports",
+  incidents: "Incidents", notifications: "Notifications", ai: "AI Intelligence", reports: "Reports", analytics: "Analytics",
   audit: "Audit Logs", integrations: "Integrations", settings: "Settings", escalations: "Escalations", pipeline: "AI Pipeline",
 };
 
 export function navigationForRole(role: string) {
   return navByRole[aliases[role] || role] || navByRole.customer;
+}
+
+function navigationForUser(user: { role:string; public_role?:string; permissions:string[] } | null) {
+  if (!user) return navByRole.customer;
+  const canonical = aliases[user.role] || user.role;
+  const experience = user.public_role || (canonical === "customer" ? "customer" : canonical === "support_agent" ? "engineer" : "admin");
+  if (experience === "customer") return [["/customer", IconDashboard, "Overview"], ["/tickets", IconQueue, "My Tickets"], ["/knowledge", IconKnowledge, "Knowledge Base"], ["/notifications", IconBell, "Notifications"]] as Array<[string,IconType,string]>;
+  if (experience === "engineer") return [["/engineer", IconDashboard, "Command Centre"], ["/queue", IconQueue, "My Queue"], ["/tickets", IconQueue, "Department Queue"], ["/knowledge", IconKnowledge, "Knowledge"], ["/analytics", IconChart, "Analytics"]] as Array<[string,IconType,string]>;
+  const granted = new Set(user.permissions);
+  const admin: Array<[string,IconType,string,string?]> = [
+    ["/admin", IconDashboard, "Overview"], ["/tickets", IconQueue, "Tickets", "ticket:read_all"],
+    ["/admin/engineers", IconSettings, "Engineers", "user:manage"], ["/review", IconAlert, "AI Review", "review:manage"],
+    ["/incidents", IconAlert, "Incidents", "incident:manage"], ["/knowledge", IconKnowledge, "Knowledge", "knowledge:manage"],
+    ["/analytics", IconChart, "Analytics", "analytics:all"], ["/audit", IconShield, "Audit", "audit:read"],
+    ["/settings", IconPlug, "Settings", "integration:manage"],
+  ];
+  return admin.filter(([, , , permission]) => !permission || granted.has(permission)).map(([to, icon, label]) => [to, icon, label] as [string,IconType,string]);
 }
 
 function useBreadcrumbs() {
@@ -79,7 +96,8 @@ export default function Shell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("ts_sidebar_collapsed") === "1");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const role = aliases[user?.role || ""] || user?.role || "customer";
-  const nav = navigationForRole(role);
+  const experience = user?.public_role || (role === "customer" ? "customer" : role === "support_agent" ? "engineer" : "admin");
+  const nav = navigationForUser(user);
   const crumbs = useBreadcrumbs();
 
   useEffect(() => { api.notifications().then(setNotes).catch(() => setNotes([])); }, []);
@@ -107,7 +125,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           <div className="ai-status"><span /><div><b>AI systems connected</b><small>Backend health monitored</small></div></div>
           <div className="profile">
             <Avatar name={user?.full_name || labels[role]} size={34} />
-            <div><b>{user?.full_name || labels[role]}</b><small>{labels[user?.role || ""] || user?.role}</small></div>
+            <div><b>{user?.full_name || labels[role]}</b><small>{experience === "engineer" ? "Engineer" : experience === "admin" ? "Admin" : "Customer"}</small></div>
             <button onClick={logout} title="Sign out" aria-label="Sign out"><IconLogout size={17} /></button>
           </div>
           <button className="collapse-toggle" onClick={() => setCollapsed(v => !v)} aria-pressed={collapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
@@ -122,7 +140,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         <div className="aside-bottom">
           <div className="profile">
             <Avatar name={user?.full_name || labels[role]} size={34} />
-            <div><b>{user?.full_name || labels[role]}</b><small>{labels[user?.role || ""] || user?.role}</small></div>
+            <div><b>{user?.full_name || labels[role]}</b><small>{experience === "engineer" ? "Engineer" : experience === "admin" ? "Admin" : "Customer"}</small></div>
             <button onClick={logout} title="Sign out" aria-label="Sign out"><IconLogout size={17} /></button>
           </div>
         </div>
@@ -142,12 +160,12 @@ export default function Shell({ children }: { children: ReactNode }) {
             <kbd>Enter</kbd>
           </form>
           <div className="header-actions">
-            <span className="role-label">{labels[user?.role || ""] || user?.role}</span>
+            <span className="role-label">{experience === "engineer" ? "Engineer" : experience === "admin" ? "Admin" : "Customer"}</span>
             <IconButton label="Notifications" onClick={() => setShowNotes(!showNotes)} active={showNotes} aria-expanded={showNotes} aria-haspopup="true">
               <IconBell size={17} />
               {notes.some(note => !note.is_read) && <i aria-hidden="true" />}
             </IconButton>
-            {role !== "auditor" && <button className="primary" onClick={() => navigate("/tickets/new")}><IconPlus size={15} />New ticket</button>}
+            {experience === "customer" && <button className="primary" onClick={() => navigate("/tickets/new")}><IconPlus size={15} />New ticket</button>}
             {showNotes && (
               <div className="notification-popover" role="dialog" aria-label="Notifications">
                 <b>Notifications</b>

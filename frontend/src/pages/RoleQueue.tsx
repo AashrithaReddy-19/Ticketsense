@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type QueueTicket } from "../api/client";
+import { api, type EngineerWorkload, type QueueTicket } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { Badge, Empty, Loading } from "../components/States";
+import { Badge, Empty, Loading, SyncIndicator } from "../components/States";
 import { IconAlert } from "../components/icons";
 import { Button } from "../components/ui/Button";
-import { ConfirmDialog } from "../components/ui/Dialog";
 import { FilterBar, SearchInput } from "../components/ui/Utility";
-
-const DECISIONS = ["approve", "modify", "reject", "return"] as const;
-type Decision = (typeof DECISIONS)[number];
+import { useAutoRefresh } from "../lib/useAutoRefresh";
 
 export default function RoleQueue() {
   const { user } = useAuth();
@@ -27,30 +24,20 @@ export default function RoleQueue() {
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [priority, setPriority] = useState("");
-  const [pending, setPending] = useState<{ id: string; decision: Decision } | null>(null);
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [workloads, setWorkloads] = useState<EngineerWorkload[]>([]);
 
-  async function load() {
-    setLoading(true); setError("");
-    try { setItems((await api.queue(queue)).items); }
-    catch (e) { setError(e instanceof Error ? e.message : "Unable to load queue"); }
-    finally { setLoading(false); }
+  async function load(opts: { silent?: boolean } = {}) {
+    if (!opts.silent) { setLoading(true); setError(""); }
+    try { setItems((await api.queue(queue)).items); if(lead)setWorkloads(await api.engineerWorkloads()); }
+    catch (e) { if (!opts.silent) setError(e instanceof Error ? e.message : "Unable to load queue"); else throw e; }
+    finally { if (!opts.silent) setLoading(false); }
   }
   useEffect(() => { load(); }, [queue, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { status: syncStatus, lastSyncedAt, retryNow } = useAutoRefresh(() => load({ silent: true }), undefined, !loading && !error);
 
   async function accept(id: string) {
     try { await api.acceptTicket(id); setQueue("assigned"); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : "Unable to accept ticket"); }
-  }
-
-  async function confirmDecision() {
-    if (!pending) return;
-    if (reason.trim().length < 3) return;
-    setBusy(true);
-    try { await api.reviewTicket(pending.id, { decision: pending.decision, reason: reason.trim() }); await load(); setPending(null); setReason(""); }
-    catch (e) { setError(e instanceof Error ? e.message : "Review failed"); }
-    finally { setBusy(false); }
   }
 
   const filtered = useMemo(() => {
@@ -64,10 +51,11 @@ export default function RoleQueue() {
 
   return (
     <div className="content">
-      <div className="page-title"><div><h1>{title}</h1><p>Live tenant and department scoped tickets.</p></div></div>
+      <div className="page-title"><div><h1>{title}</h1><p>Live tenant and department scoped tickets.</p></div><SyncIndicator status={syncStatus} lastSyncedAt={lastSyncedAt} onRetry={retryNow} /></div>
       <div className="tabs" role="tablist">
         {tabs.map(([key, label]) => <button key={key} role="tab" aria-selected={queue === key} className={queue === key ? "active" : ""} onClick={() => setQueue(key)}>{label}</button>)}
       </div>
+      {lead && <section className="panel workload-panel"><div className="panel-head"><div><h2>Engineer workload</h2><p>Backend-calculated department capacity and ticket counts.</p></div></div>{workloads.length?<div className="table-scroll"><div className="list-head workload-row"><span>Engineer</span><span>Availability</span><span>Active / capacity</span><span>In progress</span><span>Review</span><span>Escalated</span></div>{workloads.map(row=><article className="list-row workload-row" key={row.id}><div><b>{row.name}</b><small>{row.specializations.join(", ")||row.department||"No specialization"}</small></div><Badge value={row.is_active&&row.is_available?"available":"unavailable"}/><span>{row.active_workload} / {row.capacity} ({row.capacity_percent}%)</span><span>{row.in_progress}</span><span>{row.under_review}</span><span>{row.escalated}</span></article>)}</div>:<Empty label="No engineers are configured for this department."/>}</section>}
 
       <FilterBar>
         <SearchInput value={q} onChange={setQ} placeholder="Search ticket title or ID" />
@@ -98,7 +86,7 @@ export default function RoleQueue() {
                   {!reviewer && !lead && queue === "department_triage" && <Button variant="outline" size="sm" onClick={() => accept(t.id)}>Accept</Button>}
                   {reviewer && (
                     <div className="review-actions">
-                      {DECISIONS.map(d => <button key={d} onClick={() => { setPending({ id: t.id, decision: d }); setReason(""); }}>{d}</button>)}
+                      <Link className="ui-btn ui-btn-primary ui-btn-sm" to={`/tickets/${t.id}`}>Open review</Link>
                     </div>
                   )}
                 </div>
@@ -108,19 +96,6 @@ export default function RoleQueue() {
         </>
       ) : <Empty label={items.length ? "No tickets match these filters." : "No tickets in this authorized queue."} />}
 
-      <ConfirmDialog
-        open={!!pending}
-        onClose={() => { setPending(null); setReason(""); }}
-        onConfirm={confirmDecision}
-        title={pending ? `${pending.decision.charAt(0).toUpperCase()}${pending.decision.slice(1)} this ticket` : ""}
-        description="A review reason is required and is recorded on the ticket's history."
-        confirmLabel="Submit decision"
-        variant={pending?.decision === "reject" ? "destructive" : "primary"}
-        busy={busy}
-        requireReason
-        reason={reason}
-        onReasonChange={setReason}
-      />
     </div>
   );
 }

@@ -25,9 +25,9 @@ describe("customer-safe ticket detail", () => {
   });
 
   it("does not mark future lifecycle stages complete", () => {
-    const steps = customerTimeline(ticket("in_review"));
-    expect(steps.find(step => step.key === "open")?.done).toBe(true);
-    expect(steps.find(step => step.key === "in_review")?.active).toBe(true);
+    const steps = customerTimeline(ticket("pending_review"));
+    expect(steps.find(step => step.key === "submitted")?.done).toBe(true);
+    expect(steps.find(step => step.key === "pending_review")?.active).toBe(true);
     expect(steps.find(step => step.key === "resolved")?.done).toBe(false);
   });
 });
