@@ -81,7 +81,16 @@ const SEVERITY: Record<string, BadgeMeta> = {
   critical: { label: "Critical", tone: "danger" },
 };
 
-const ALL_DOMAINS = [TICKET_STATUS, PRIORITY, SENTIMENT, GENERATION_STATUS, CITATION_VALIDATION, EXTRACTION_STATUS, ATTACHMENT_STATUS, SEVERITY];
+const KNOWLEDGE_ARTICLE_STATUS: Record<string, BadgeMeta> = {
+  draft: { label: "Draft", tone: "neutral" },
+  pending_review: { label: "Pending review", tone: "warning" },
+  published: { label: "Published", tone: "success" },
+  rejected: { label: "Rejected", tone: "danger" },
+  stale: { label: "Stale", tone: "warning" },
+  current: { label: "Current", tone: "success" },
+};
+
+const ALL_DOMAINS = [TICKET_STATUS, PRIORITY, SENTIMENT, GENERATION_STATUS, CITATION_VALIDATION, EXTRACTION_STATUS, ATTACHMENT_STATUS, SEVERITY, KNOWLEDGE_ARTICLE_STATUS];
 
 /** Auto-detects which domain a raw backend value belongs to. Existing call sites pass a
  * bare status/priority/sentiment string without saying which — this preserves that. */

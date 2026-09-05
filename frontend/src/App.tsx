@@ -13,6 +13,7 @@ import RoleQueue from "./pages/RoleQueue";
 import { AIMetrics, Audit, Integrations } from "./pages/AdminData";
 import KnowledgePipeline from "./pages/KnowledgePipeline";
 import AdminEngineers from "./pages/AdminEngineers";
+import AdminKnowledge from "./pages/AdminKnowledge";
 import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import AdminPortal from "./pages/AdminPortal";
 import { Loading } from "./components/States";
@@ -47,6 +48,11 @@ export function CapabilityRoute({ anyOf, children }: { anyOf: string[]; children
   return <>{children}</>;
 }
 
+export function KnowledgeRoute() {
+  const { hasPermission } = useAuth();
+  return hasPermission("knowledge:manage") ? <AdminKnowledge /> : <Knowledge />;
+}
+
 function publicExperience(role: string, declared?: string) {
   if (declared) return declared;
   const canonical = aliases[role] || role;
@@ -74,7 +80,7 @@ export function Protected() {
     <Route path="/escalations" element={<Tickets escalated />} />
     <Route path="/tickets/new" element={<NewTicket />} />
     <Route path="/tickets/:id" element={<TicketWorkspace />} />
-    <Route path="/knowledge" element={<Knowledge />} />
+    <Route path="/knowledge" element={<KnowledgeRoute />} />
     <Route path="/incidents" element={<Incidents />} />
     <Route path="/notifications" element={<Notifications />} />
     <Route path="/ai" element={<CapabilityRoute anyOf={["ticket:internal_ai", "ai:monitor"]}><AIMetrics /></CapabilityRoute>} />

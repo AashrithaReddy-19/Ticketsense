@@ -50,12 +50,18 @@ export interface TechnicalEntity {id:string;entity_type:string;raw_value:string;
 export interface PipelineTrace {execution:null|{id:string;pipeline_version:string;trigger_type:string;status:string;started_at:string;completed_at:string|null;total_duration_ms:number|null;failure_stage:string|null;fallback_used:boolean;correlation_id:string};stages:Array<{id:string;stage_name:string;sequence_number:number;status:string;output_summary:string|null;provider_name:string|null;provider_version:string|null;confidence:number|null;started_at:string;completed_at:string;duration_ms:number;error_category:string|null;safe_error_summary:string|null;fallback_used:boolean}>;claims:Array<{claim_text:string;citation_id:string|null;validation_status:string;risk_level:string;reason:string;validator_version:string}>}
 export interface TicketExplanation {predicted_department:string|null;candidate_department_probabilities:Record<string,number>|null;predicted_category:string|null;predicted_priority:string|null;important_keywords:string[]|null;technical_entities:Array<{type:string;value:string}>;routing_reason:string|null;assignment_reason:string|null;top_retrieval_similarity:number|null;retrieval_score_gap:number|null;valid_evidence_count:number;citation_coverage:number|null;confidence_score:number|null;low_threshold:number|null;high_threshold:number|null;confidence_band:string|null;positive_factors:string[];risk_factors:string[];grounding_status:string|null;human_review_decision:string|null;disclaimer:string}
 export interface TicketEvent {id:string;event_type:string;old_status?:string|null;new_status?:string|null;comment?:string|null;draft_version?:number|null;actor_role?:string|null;created_at:string;visibility:string}
-export interface EngineerSummary {id:string;email:string;full_name:string;department_id:string;is_active:boolean;active_tickets:number;resolved_tickets:number;specializations:string[]}
+export interface EngineerSkill {specialization:string;skill_level:string|null;is_primary:boolean}
+export interface EngineerSummary {id:string;email:string;full_name:string;department_id:string;is_active:boolean;is_available?:boolean;max_active_workload?:number;active_tickets:number;resolved_tickets:number;specializations:string[];skills?:EngineerSkill[]}
 export interface EngineerWorkload {id:string;name:string;department_id:string|null;department:string|null;specializations:string[];is_active:boolean;is_available:boolean;capacity:number;active_workload:number;capacity_percent:number;assigned:number;in_progress:number;under_review:number;returned:number;escalated:number;resolved:number;average_resolution_hours:number|null}
 export interface DepartmentPerformance {department_id:string;department:string;total_tickets:number;resolved_tickets:number;average_confidence:number|null}
 export interface PipelineStageLatency {stage:string;average_duration_ms:number|null;sample_count:number;failure_count:number}
 export interface Analytics { total_tickets:number; open_tickets:number; resolved_tickets:number; escalated_tickets:number; average_confidence:number; status_distribution:Record<string,number>; ai_acceptance_rate:number|null; engineer_edit_rate:number|null; reviewer_modification_rate:number|null; rejection_rate:number|null; escalation_rate:number|null; ai_human_agreement:number|null; confidence_distribution:Record<"low"|"borderline"|"high",number>; average_response_time_hours:number|null; average_resolution_time_hours:number|null; department_performance:DepartmentPerformance[]; pipeline_stage_latency:PipelineStageLatency[] }
 export interface Incident { id:string; title:string; service:string; status:string; severity:string; ticket_count:number; growth_rate:number; common_symptom?:string }
+export interface KnowledgeArticleSummary { id:string; title:string; status:"draft"|"pending_review"|"published"|"rejected"; version:string; department_id:string|null; source_ticket_ids:string[]; source_signal:string|null; published_knowledge_base_id:string|null; rejected_reason:string|null; created_at:string }
+export interface KnowledgeGapCategory { category:string; count:number; example_ticket_ids?:string[]; average_edit_ratio?:number }
+export interface KnowledgeGaps { window_days:number; weak_evidence_by_category:KnowledgeGapCategory[]; heavy_edit_by_category:KnowledgeGapCategory[] }
+export interface KnowledgeHealthArticle { id:string; title:string; department_id:string|null; version:string; age_days:number|null; stale:boolean }
+export interface KnowledgeHealth { stale_after_days:number; articles:KnowledgeHealthArticle[] }
 export interface Notification { id:string; title:string; message:string; kind:string; is_read:boolean; created_at:string }
 export interface QueueTicket {id:string;display_id:string;title:string;requester_id:string;department_id:string|null;assignee_id:string|null;status:string;priority:string;sla_state:string;created_at:string;updated_at:string;analysis_status:string;review_required:boolean;review_reason?:string;confidence_band:string;risk:string}
 export interface QueueResponse {items:QueueTicket[];page:number;page_size:number;total:number;queue_type:string}
@@ -99,7 +105,13 @@ export const api = {
   reopenTicket: (id:string,comment?:string) => request<{ticket_id:string;status:string}>(`/api/tickets/${id}/reopen`,{method:"POST",body:JSON.stringify({comment})}),
   departmentEngineers: (departmentId:string) => request<EngineerSummary[]>(`/api/departments/${departmentId}/engineers`),
   assignTicket: (id:string,engineerId:string,comment?:string) => request<{ticket_id:string;status:string;assignee_id:string}>(`/api/tickets/${id}/assign`,{method:"POST",body:JSON.stringify({engineer_id:engineerId,comment})}),
-  adminEngineers: () => request<EngineerSummary[]>("/api/admin/engineers"),
+  adminEngineers: (filters?:{specialization?:string;available_only?:boolean}) => {
+    const params = new URLSearchParams();
+    if (filters?.specialization) params.set("specialization", filters.specialization);
+    if (filters?.available_only) params.set("available_only", "true");
+    const query = params.toString();
+    return request<EngineerSummary[]>(`/api/admin/engineers${query ? `?${query}` : ""}`);
+  },
   adminDepartments: () => request<Array<{id:string;name:string;description?:string}>>("/api/admin/departments"),
   engineerWorkloads: () => request<EngineerWorkload[]>("/api/workloads/engineers"),
   createEngineer: (payload:{email:string;full_name:string;password:string;department_id:string;specializations:string[]}) => request<EngineerSummary>("/api/admin/engineers",{method:"POST",body:JSON.stringify(payload)}),
@@ -114,6 +126,12 @@ export const api = {
   aiMetrics: () => request<{agents:Array<Record<string,number|string>>;provider:string;external_cost_usd:number}>("/api/ai/metrics"),
   incidents: () => request<Incident[]>("/api/incidents"),
   knowledge: (q="") => request<Array<{id:string;title:string;excerpt:string;source?:string;updated_at:string}>>(`/api/knowledge?${new URLSearchParams({q})}`),
+  knowledgeArticles: (statusFilter="") => request<KnowledgeArticleSummary[]>(`/api/knowledge/articles${statusFilter ? `?status_filter=${statusFilter}` : ""}`),
+  generateKnowledgeArticle: (payload:{title:string;body:string;source_ticket_ids?:string[]}) => request<{id:string;status:string;title:string}>("/api/knowledge/articles/generate",{method:"POST",body:JSON.stringify(payload)}),
+  approveKnowledgeArticle: (id:string) => request<{id:string;status:string;knowledge_base_id:string}>(`/api/knowledge/articles/${id}/approve`,{method:"POST"}),
+  rejectKnowledgeArticle: (id:string,reason:string) => request<{id:string;status:string}>(`/api/knowledge/articles/${id}/reject`,{method:"POST",body:JSON.stringify({reason})}),
+  knowledgeGaps: (days?:number) => request<KnowledgeGaps>(`/api/knowledge/gaps${days ? `?days=${days}` : ""}`),
+  knowledgeHealth: (staleAfterDays?:number) => request<KnowledgeHealth>(`/api/knowledge/health${staleAfterDays ? `?stale_after_days=${staleAfterDays}` : ""}`),
   notifications: () => request<Notification[]>("/api/notifications"),
   markNotificationRead: (id:string) => request<{id:string;is_read:boolean}>(`/api/notifications/${id}/read`,{method:"POST"}),
   auditLogs: () => request<Array<Record<string,unknown>>>("/api/audit-logs"),

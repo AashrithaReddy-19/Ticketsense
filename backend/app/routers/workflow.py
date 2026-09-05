@@ -222,12 +222,49 @@ async def department_engineers(department_id: UUID, user: User = Depends(get_cur
     return [{"id": row.id, "full_name": row.full_name, "email": row.email, "department_id": row.department_id, "is_active": row.is_active} for row in rows]
 
 
+async def specializations_by_user(db: AsyncSession, user_ids: list) -> dict:
+    """Batch-fetch each engineer's specializations from the canonical engineer_skills
+    table (one query for every user, never N+1), falling back to the legacy
+    engineer_specializations table only for a user with zero engineer_skills rows —
+    a tenant that has never been touched by the newer admin engineer flows."""
+    if not user_ids:
+        return {}
+    grouped: dict = {uid: [] for uid in user_ids}
+    skill_rows = (await db.scalars(
+        select(EngineerSkill).where(EngineerSkill.user_id.in_(user_ids), EngineerSkill.is_active.is_(True))
+        .order_by(EngineerSkill.is_primary.desc(), EngineerSkill.skill_level.desc())
+    )).all()
+    covered = set()
+    for row in skill_rows:
+        grouped[row.user_id].append({"specialization": row.specialization, "skill_level": row.skill_level, "is_primary": row.is_primary})
+        covered.add(row.user_id)
+    missing = [uid for uid in user_ids if uid not in covered]
+    if missing:
+        legacy_rows = (await db.scalars(select(EngineerSpecialization).where(EngineerSpecialization.user_id.in_(missing)))).all()
+        for row in legacy_rows:
+            grouped[row.user_id].append({"specialization": row.name, "skill_level": None, "is_primary": False})
+    return grouped
+
+
 @router.get("/admin/engineers")
-async def admin_engineers(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    require("user:manage", user); engineers = (await db.scalars(select(User).where(User.tenant_id == user.tenant_id, User.role.in_(["support_agent", "department_engineer"])).order_by(User.full_name))).all(); result = []
+async def admin_engineers(specialization: str = "", available_only: bool = False, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    require("user:manage", user)
+    engineers = (await db.scalars(select(User).where(User.tenant_id == user.tenant_id, User.role.in_(["support_agent", "department_engineer"])).order_by(User.full_name))).all()
+    engineer_ids = [engineer.id for engineer in engineers]
+    skills_by_user = await specializations_by_user(db, engineer_ids)
+    active_counts = dict((await db.execute(select(Ticket.assignee_id, func.count()).where(Ticket.assignee_id.in_(engineer_ids), Ticket.status.notin_(["resolved", "closed"]), Ticket.deleted_at.is_(None)).group_by(Ticket.assignee_id))).all())
+    resolved_counts = dict((await db.execute(select(Ticket.assignee_id, func.count()).where(Ticket.assignee_id.in_(engineer_ids), Ticket.status.in_(["resolved", "closed"]), Ticket.deleted_at.is_(None)).group_by(Ticket.assignee_id))).all())
+    result = []
     for engineer in engineers:
-        active = await db.scalar(select(func.count()).select_from(Ticket).where(Ticket.assignee_id == engineer.id, Ticket.status.notin_(["resolved", "closed"]), Ticket.deleted_at.is_(None))); resolved = await db.scalar(select(func.count()).select_from(Ticket).where(Ticket.assignee_id == engineer.id, Ticket.status.in_(["resolved", "closed"]), Ticket.deleted_at.is_(None))); specs = (await db.scalars(select(EngineerSpecialization.name).where(EngineerSpecialization.user_id == engineer.id))).all()
-        result.append({"id": engineer.id, "full_name": engineer.full_name, "email": engineer.email, "department_id": engineer.department_id, "is_active": engineer.is_active, "is_available":engineer.is_available,"max_active_workload":engineer.max_active_workload,"active_tickets": active or 0, "resolved_tickets": resolved or 0, "specializations": list(specs)})
+        skills = skills_by_user.get(engineer.id, [])
+        if specialization and not any(specialization.lower() in row["specialization"].lower() for row in skills):
+            continue
+        if available_only and not engineer.is_available:
+            continue
+        result.append({"id": engineer.id, "full_name": engineer.full_name, "email": engineer.email, "department_id": engineer.department_id,
+                        "is_active": engineer.is_active, "is_available": engineer.is_available, "max_active_workload": engineer.max_active_workload,
+                        "active_tickets": int(active_counts.get(engineer.id, 0)), "resolved_tickets": int(resolved_counts.get(engineer.id, 0)),
+                        "specializations": [row["specialization"] for row in skills], "skills": skills})
     return result
 
 
@@ -290,10 +327,11 @@ async def engineer_workloads(user: User = Depends(get_current_user), db: AsyncSe
     if role=="team_lead": query=query.where(User.department_id==user.department_id)
     engineers=(await db.scalars(query.order_by(User.full_name))).all(); output=[]
     active_states=["assigned","in_progress","pending_review","changes_requested","reopened","escalated"]
+    skills_by_user = await specializations_by_user(db, [engineer.id for engineer in engineers])
     for engineer in engineers:
         rows=(await db.execute(select(Ticket.status,func.count()).where(Ticket.assignee_id==engineer.id,Ticket.deleted_at.is_(None)).group_by(Ticket.status))).all(); counts={status:int(count) for status,count in rows}; active=sum(counts.get(state,0) for state in active_states)
         avg_seconds=await db.scalar(select(func.avg(func.extract("epoch",Ticket.resolved_at-Ticket.created_at))).where(Ticket.assignee_id==engineer.id,Ticket.resolved_at.is_not(None)))
-        specs=list((await db.scalars(select(EngineerSpecialization.name).where(EngineerSpecialization.user_id==engineer.id))).all())
+        specs=[row["specialization"] for row in skills_by_user.get(engineer.id, [])]
         department=await db.get(Department,engineer.department_id) if engineer.department_id else None
         capacity_percent=round(active/engineer.max_active_workload*100,1)
         workload_label="Overloaded" if capacity_percent>=100 else "High" if capacity_percent>=75 else "Balanced" if capacity_percent>=30 else "Low"
