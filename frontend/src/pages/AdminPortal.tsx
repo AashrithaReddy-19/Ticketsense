@@ -10,6 +10,7 @@ const modules = [
   { capability: "knowledge:manage", to: "/knowledge", title: "Knowledge", detail: "Govern approved, versioned and publishable support evidence.", icon: IconKnowledge },
   { capability: "playbook:manage", to: "/admin/playbooks", title: "Playbooks", detail: "Versioned resolution playbooks for recurring issues, gated by the policy engine.", icon: IconLayers },
   { capability: "safe_action:execute", to: "/admin/safe-actions", title: "Safe actions", detail: "Allowlisted, audited actions with dry-run, confirmation, and risk-based approval.", icon: IconSparkle },
+  { capability: "prevention:manage", to: "/admin/prevention", title: "Predictive prevention", detail: "Evidence-backed recommendations from real tenant trends — never a confirmed cause.", icon: IconChart },
   { capability: "analytics:all", to: "/analytics", title: "Analytics", detail: "Live operational, confidence, workflow and workload metrics.", icon: IconChart },
   { capability: "audit:read", to: "/audit", title: "Audit & compliance", detail: "Search immutable security and workflow events.", icon: IconShield },
   { capability: "integration:manage", to: "/integrations", title: "Settings & integrations", detail: "Inspect connector status without exposing stored configuration.", icon: IconPlug },

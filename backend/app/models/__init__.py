@@ -20,6 +20,7 @@ from app.models.enterprise import (
 )
 from app.models.playbook import Playbook, PlaybookApplication
 from app.models.safe_action import SafeActionApproval, SafeActionDefinition, SafeActionExecution, SafeActionResult
+from app.models.prevention import PreventionRecommendation, RecommendationAction, RecommendationEvidence
 
 __all__ = [
     "Base",
@@ -41,4 +42,5 @@ __all__ = [
     "ResolutionConfirmation", "DiagnosticPlan", "DiagnosticStep",
     "Playbook", "PlaybookApplication",
     "SafeActionDefinition", "SafeActionExecution", "SafeActionApproval", "SafeActionResult",
+    "PreventionRecommendation", "RecommendationEvidence", "RecommendationAction",
 ]

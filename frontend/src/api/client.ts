@@ -63,6 +63,8 @@ export interface SafeActionDefinition { action_key:string; display_name:string; 
 export interface SafeActionResultPayload { summary:string; data:Record<string,unknown>; evidence:unknown[]; sandbox:boolean; rollback_available:boolean; rolled_back:boolean }
 export interface SafeActionExecution { id:string; action_key:string; ticket_id:string|null; department_id:string|null; requested_by:string; mode:"preview"|"execute"; status:string; requires_approval:boolean; error_summary:string|null; started_at:string|null; completed_at:string|null; duration_ms:number|null; created_at:string; result?:SafeActionResultPayload }
 export interface SafeActionPreview { action_key:string; mode:"preview"; would_do:string; would_not_do:string; parameters:Record<string,unknown>; risk_level:string; requires_confirmation:boolean; requires_customer_consent:boolean; department_id:string|null }
+export interface PreventionRecommendation { id:string; department_id:string|null; category:string|null; recommendation_type:string; title:string; description:string; window_days:number; supporting_ticket_count:number; evidence_strength:"low"|"medium"|"high"; expected_benefit:string; status:string; decision_reason:string|null; linked_incident_id:string|null; linked_knowledge_article_id:string|null; generated_at:string; decided_by:string|null; decided_at:string|null; created_at:string }
+export interface PreventionRecommendationDetail extends PreventionRecommendation { evidence:Array<{evidence_type:string;reference_id:string|null;detail:Record<string,unknown>}>; actions:Array<{action_type:string;actor_id:string;reason:string|null;created_at:string}> }
 export interface KnowledgeArticleSummary { id:string; title:string; status:"draft"|"pending_review"|"published"|"rejected"; version:string; department_id:string|null; source_ticket_ids:string[]; source_signal:string|null; published_knowledge_base_id:string|null; rejected_reason:string|null; created_at:string }
 export interface KnowledgeGapCategory { category:string; count:number; example_ticket_ids?:string[]; average_edit_ratio?:number }
 export interface KnowledgeGaps { window_days:number; weak_evidence_by_category:KnowledgeGapCategory[]; heavy_edit_by_category:KnowledgeGapCategory[] }
@@ -156,6 +158,22 @@ export const api = {
     return request<SafeActionExecution[]>(`/api/safe-actions/executions${query ? `?${query}` : ""}`);
   },
   safeActionExecution: (id:string) => request<SafeActionExecution>(`/api/safe-actions/executions/${id}`),
+  scanForPreventionRecommendations: () => request<PreventionRecommendation[]>("/api/prevention/scan", { method: "POST" }),
+  preventionRecommendations: (filters?:{department_id?:string;recommendation_type?:string;status_filter?:string}) => {
+    const params = new URLSearchParams();
+    if (filters?.department_id) params.set("department_id", filters.department_id);
+    if (filters?.recommendation_type) params.set("recommendation_type", filters.recommendation_type);
+    if (filters?.status_filter) params.set("status_filter", filters.status_filter);
+    const query = params.toString();
+    return request<PreventionRecommendation[]>(`/api/prevention/recommendations${query ? `?${query}` : ""}`);
+  },
+  preventionRecommendation: (id:string) => request<PreventionRecommendationDetail>(`/api/prevention/recommendations/${id}`),
+  acceptRecommendation: (id:string) => request<PreventionRecommendation>(`/api/prevention/recommendations/${id}/accept`, { method: "POST" }),
+  rejectRecommendation: (id:string,reason:string) => request<PreventionRecommendation>(`/api/prevention/recommendations/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  investigateRecommendation: (id:string) => request<PreventionRecommendation>(`/api/prevention/recommendations/${id}/investigate`, { method: "POST" }),
+  dismissRecommendation: (id:string,reason:string) => request<PreventionRecommendation>(`/api/prevention/recommendations/${id}/dismiss`, { method: "POST", body: JSON.stringify({ reason }) }),
+  convertRecommendationToKnowledge: (id:string) => request<{recommendation:PreventionRecommendation;knowledge_article_id:string}>(`/api/prevention/recommendations/${id}/convert-to-knowledge`, { method: "POST" }),
+  linkRecommendationToIncident: (id:string,incidentId:string) => request<PreventionRecommendation>(`/api/prevention/recommendations/${id}/link-incident`, { method: "POST", body: JSON.stringify({ incident_id: incidentId }) }),
   knowledge: (q="") => request<Array<{id:string;title:string;excerpt:string;source?:string;updated_at:string}>>(`/api/knowledge?${new URLSearchParams({q})}`),
   knowledgeArticles: (statusFilter="") => request<KnowledgeArticleSummary[]>(`/api/knowledge/articles${statusFilter ? `?status_filter=${statusFilter}` : ""}`),
   generateKnowledgeArticle: (payload:{title:string;body:string;source_ticket_ids?:string[]}) => request<{id:string;status:string;title:string}>("/api/knowledge/articles/generate",{method:"POST",body:JSON.stringify(payload)}),
