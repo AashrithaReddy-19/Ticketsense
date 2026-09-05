@@ -121,6 +121,9 @@ async def create_ticket(payload: TicketCreate, user: User = Depends(get_current_
         db.add(TicketEvent(tenant_id=ticket.tenant_id,ticket_id=ticket.id,event_type=event_type,old_status=old,new_status=new,actor_id=user.id if event_type=="ticket_submitted" else None,actor_role=user.role if event_type=="ticket_submitted" else "system",comment=PUBLIC_MESSAGES.get(new),visibility=visibility))
     if ticket.status == "routed":
         await auto_assign_ticket(db, ticket)
+    if department:
+        from app.services.incidents import detect_incident_candidate
+        await detect_incident_candidate(db, ticket)
     if user.tenant_id:
         for agent_name in ("ticket_understanding", "classification", "priority", "sla", "duplicate_detection", "knowledge_retrieval", "historical_ticket", "solution_generation", "root_cause", "evidence_validation", "policy_validation", "safety", "pii", "confidence", "routing", "knowledge_gap", "incident_detection", "knowledge_article", "feedback"):
             db.add(AIDecision(tenant_id=user.tenant_id, ticket_id=ticket.id, agent_name=agent_name, decision={"result": analysis.get("decision"), "category": analysis.get("category"),"confidence_model_version":confidence["model_version"],"confidence_gate":confidence["gate"]}, confidence=confidence["score"], latency_ms=12))

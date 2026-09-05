@@ -40,6 +40,8 @@ class Notification(Base, UUIDPKMixin, CreatedAtMixin):
 class Incident(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "incidents"
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), index=True)
+    department_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"))
+    category: Mapped[str | None] = mapped_column(String(120))
     title: Mapped[str] = mapped_column(String(255))
     service: Mapped[str] = mapped_column(String(160))
     status: Mapped[str] = mapped_column(String(30), default="investigating")
@@ -47,6 +49,10 @@ class Incident(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):
     ticket_count: Mapped[int] = mapped_column(Integer, default=0)
     growth_rate: Mapped[float] = mapped_column(Numeric, default=0)
     common_symptom: Mapped[str | None] = mapped_column(Text)
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    detection_reason: Mapped[str | None] = mapped_column(Text)
 
 
 class KnowledgeArticle(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):

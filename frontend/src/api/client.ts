@@ -56,7 +56,9 @@ export interface EngineerWorkload {id:string;name:string;department_id:string|nu
 export interface DepartmentPerformance {department_id:string;department:string;total_tickets:number;resolved_tickets:number;average_confidence:number|null}
 export interface PipelineStageLatency {stage:string;average_duration_ms:number|null;sample_count:number;failure_count:number}
 export interface Analytics { total_tickets:number; open_tickets:number; resolved_tickets:number; escalated_tickets:number; average_confidence:number; status_distribution:Record<string,number>; ai_acceptance_rate:number|null; engineer_edit_rate:number|null; reviewer_modification_rate:number|null; rejection_rate:number|null; escalation_rate:number|null; ai_human_agreement:number|null; confidence_distribution:Record<"low"|"borderline"|"high",number>; average_response_time_hours:number|null; average_resolution_time_hours:number|null; department_performance:DepartmentPerformance[]; pipeline_stage_latency:PipelineStageLatency[] }
-export interface Incident { id:string; title:string; service:string; status:string; severity:string; ticket_count:number; growth_rate:number; common_symptom?:string }
+export interface Incident { id:string; title:string; service:string; status:string; severity:string; department_id?:string|null; category?:string|null; ticket_count:number; growth_rate:number; common_symptom?:string; detection_reason?:string|null; confirmed_by?:string|null; confirmed_at?:string|null; resolved_at?:string|null; created_at?:string }
+export interface IncidentTicketSummary { id:string; subject:string; status:string; priority:string|null; created_at:string }
+export interface RootCauseHypothesis { incident_id:string; status:"hypothesis"; disclaimer:string; likely_symptom:string|null; recurring_error_codes:Array<{code:string;occurrences:number}>; supporting_ticket_ids:string[]; ticket_count:number }
 export interface KnowledgeArticleSummary { id:string; title:string; status:"draft"|"pending_review"|"published"|"rejected"; version:string; department_id:string|null; source_ticket_ids:string[]; source_signal:string|null; published_knowledge_base_id:string|null; rejected_reason:string|null; created_at:string }
 export interface KnowledgeGapCategory { category:string; count:number; example_ticket_ids?:string[]; average_edit_ratio?:number }
 export interface KnowledgeGaps { window_days:number; weak_evidence_by_category:KnowledgeGapCategory[]; heavy_edit_by_category:KnowledgeGapCategory[] }
@@ -127,7 +129,14 @@ export const api = {
   trace: (id:string) => request<Array<{action:string;detail:Record<string,unknown>;timestamp:string}>>(`/api/tickets/${id}/trace`),
   analytics: () => request<Analytics>("/api/analytics"),
   aiMetrics: () => request<{agents:Array<Record<string,number|string>>;provider:string;external_cost_usd:number}>("/api/ai/metrics"),
-  incidents: () => request<Incident[]>("/api/incidents"),
+  incidents: (statusFilter="") => request<Incident[]>(`/api/incidents${statusFilter ? `?status_filter=${statusFilter}` : ""}`),
+  scanForIncidents: () => request<Incident[]>("/api/incidents/scan", { method: "POST" }),
+  incidentTickets: (id:string) => request<IncidentTicketSummary[]>(`/api/incidents/${id}/tickets`),
+  incidentRootCause: (id:string) => request<RootCauseHypothesis>(`/api/incidents/${id}/root-cause`),
+  confirmIncident: (id:string) => request<Incident>(`/api/incidents/${id}/confirm`, { method: "POST" }),
+  dismissIncident: (id:string) => request<Incident>(`/api/incidents/${id}/dismiss`, { method: "POST" }),
+  notifyIncidentCustomers: (id:string) => request<{incident_id:string;notified:number}>(`/api/incidents/${id}/notify-customers`, { method: "POST" }),
+  resolveIncident: (id:string) => request<Incident>(`/api/incidents/${id}/resolve`, { method: "POST" }),
   knowledge: (q="") => request<Array<{id:string;title:string;excerpt:string;source?:string;updated_at:string}>>(`/api/knowledge?${new URLSearchParams({q})}`),
   knowledgeArticles: (statusFilter="") => request<KnowledgeArticleSummary[]>(`/api/knowledge/articles${statusFilter ? `?status_filter=${statusFilter}` : ""}`),
   generateKnowledgeArticle: (payload:{title:string;body:string;source_ticket_ids?:string[]}) => request<{id:string;status:string;title:string}>("/api/knowledge/articles/generate",{method:"POST",body:JSON.stringify(payload)}),

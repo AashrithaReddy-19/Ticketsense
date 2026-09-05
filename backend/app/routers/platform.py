@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -158,11 +158,142 @@ async def knowledge_health(stale_after_days: int = 180, user: User = Depends(get
     return {"stale_after_days": stale_after_days, "articles": sorted(rows, key=lambda row: row["age_days"] or 0, reverse=True)}
 
 
+def incident_json(x: Incident) -> dict:
+    return {"id": x.id, "title": x.title, "service": x.service, "status": x.status, "severity": x.severity,
+            "department_id": x.department_id, "category": x.category, "ticket_count": x.ticket_count,
+            "growth_rate": float(x.growth_rate), "common_symptom": x.common_symptom, "detection_reason": x.detection_reason,
+            "confirmed_by": x.confirmed_by, "confirmed_at": x.confirmed_at, "resolved_at": x.resolved_at, "created_at": x.created_at}
+
+
 @router.get("/incidents")
-async def incidents(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def incidents(status_filter: str = "", user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     await guard(db, user, "incident:manage", "ticket:internal_ai")
-    items = (await db.scalars(select(Incident).where(Incident.tenant_id == user.tenant_id).order_by(Incident.created_at.desc()))).all()
-    return [{"id": x.id, "title": x.title, "service": x.service, "status": x.status, "severity": x.severity, "ticket_count": x.ticket_count, "growth_rate": float(x.growth_rate), "common_symptom": x.common_symptom} for x in items]
+    query = select(Incident).where(Incident.tenant_id == user.tenant_id)
+    if status_filter:
+        query = query.where(Incident.status == status_filter)
+    items = (await db.scalars(query.order_by(Incident.created_at.desc()))).all()
+    return [incident_json(x) for x in items]
+
+
+async def get_owned_incident(db: AsyncSession, user: User, incident_id: UUID) -> Incident:
+    incident = await db.scalar(select(Incident).where(Incident.id == incident_id, Incident.tenant_id == user.tenant_id).with_for_update())
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    return incident
+
+
+@router.post("/incidents/scan")
+async def scan_for_incidents(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Manually re-runs candidate detection across every department that has had
+    recent activity — the same detection that already runs automatically at
+    ticket-creation time, exposed here for demo/ops control (e.g. after seeding
+    a burst of similar tickets in one demo scenario)."""
+    await guard(db, user, "incident:manage")
+    from app.services.incidents import WINDOW_HOURS, detect_incident_candidate
+    since = datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)
+    recent = list((await db.scalars(select(Ticket).where(Ticket.tenant_id == user.tenant_id, Ticket.created_at >= since, Ticket.department_id.is_not(None)))).all())
+    found = []
+    seen_departments_categories: set[tuple] = set()
+    for ticket in recent:
+        incident = await detect_incident_candidate(db, ticket)
+        if incident and (incident.department_id, incident.category) not in seen_departments_categories:
+            seen_departments_categories.add((incident.department_id, incident.category))
+            found.append(incident)
+    await db.commit()
+    return [incident_json(i) for i in found]
+
+
+@router.get("/incidents/{incident_id}/tickets")
+async def incident_tickets(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await guard(db, user, "incident:manage", "ticket:internal_ai")
+    incident = await db.scalar(select(Incident).where(Incident.id == incident_id, Incident.tenant_id == user.tenant_id))
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    rows = (await db.scalars(select(Ticket).where(Ticket.parent_incident_id == incident.id))).all()
+    return [{"id": t.id, "subject": t.subject, "status": t.status, "priority": t.priority, "created_at": t.created_at} for t in rows]
+
+
+@router.get("/incidents/{incident_id}/root-cause")
+async def incident_root_cause(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await guard(db, user, "incident:manage", "ticket:internal_ai")
+    incident = await db.scalar(select(Incident).where(Incident.id == incident_id, Incident.tenant_id == user.tenant_id))
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    from app.services.incidents import root_cause_hypothesis
+    return await root_cause_hypothesis(db, incident)
+
+
+@router.post("/incidents/{incident_id}/confirm")
+async def confirm_incident(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """A candidate incident (auto-detected) requires an explicit Admin confirmation
+    before it's treated as a declared incident — detection alone never declares one."""
+    await guard(db, user, "incident:manage")
+    incident = await get_owned_incident(db, user, incident_id)
+    if incident.status != "candidate":
+        raise HTTPException(409, "Only a candidate incident can be confirmed")
+    incident.status = "investigating"
+    incident.confirmed_by = user.id
+    incident.confirmed_at = datetime.now(timezone.utc)
+    db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="incident.confirmed", resource_type="incident", resource_id=str(incident.id), metadata_json={"ticket_count": incident.ticket_count}))
+    await db.commit()
+    await db.refresh(incident)
+    return incident_json(incident)
+
+
+@router.post("/incidents/{incident_id}/dismiss")
+async def dismiss_incident(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await guard(db, user, "incident:manage")
+    incident = await get_owned_incident(db, user, incident_id)
+    if incident.status != "candidate":
+        raise HTTPException(409, "Only a candidate incident can be dismissed")
+    incident.status = "dismissed"
+    db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="incident.dismissed", resource_type="incident", resource_id=str(incident.id), metadata_json={}))
+    await db.commit()
+    await db.refresh(incident)
+    return incident_json(incident)
+
+
+@router.post("/incidents/{incident_id}/notify-customers")
+async def notify_incident_customers(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Bulk, customer-safe status notification — never internal detail (no root-cause
+    hypothesis, no ticket cross-references) is included in the customer-facing text."""
+    await guard(db, user, "incident:manage")
+    incident = await get_owned_incident(db, user, incident_id)
+    if incident.status not in ("investigating", "confirmed"):
+        raise HTTPException(409, "Only a confirmed/investigating incident can notify customers")
+    rows = (await db.scalars(select(Ticket).where(Ticket.parent_incident_id == incident.id))).all()
+    notified = 0
+    for ticket in rows:
+        db.add(Notification(tenant_id=user.tenant_id, user_id=ticket.submitted_by, kind="incident",
+                             title="An update on your ticket", message=f"We've identified a broader issue affecting your ticket '{ticket.subject}' and our team is actively working on it."))
+        notified += 1
+    db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="incident.customers_notified", resource_type="incident", resource_id=str(incident.id), metadata_json={"notified": notified}))
+    await db.commit()
+    return {"incident_id": incident.id, "notified": notified}
+
+
+@router.post("/incidents/{incident_id}/resolve")
+async def resolve_incident(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Resolves the incident and, as a safeguard, only ever posts an internal note
+    to each still-open linked ticket suggesting the shared cause may apply —
+    never auto-resolves or auto-answers a ticket on the incident's behalf."""
+    await guard(db, user, "incident:manage")
+    incident = await get_owned_incident(db, user, incident_id)
+    if incident.status not in ("investigating", "confirmed"):
+        raise HTTPException(409, "Only a confirmed/investigating incident can be resolved")
+    incident.status = "resolved"
+    incident.resolved_at = datetime.now(timezone.utc)
+    from app.services.workflow import record_event
+    rows = (await db.scalars(select(Ticket).where(Ticket.parent_incident_id == incident.id, Ticket.status.notin_(
+        ["resolved", "resolved_by_ai", "resolved_by_engineer", "closed"])))).all()
+    for ticket in rows:
+        record_event(db, ticket, user, "incident_resolution_hint", ticket.status, ticket.status,
+                      f"Incident '{incident.title}' was marked resolved; verify whether its root cause applies before resolving this ticket.",
+                      visibility="internal")
+    db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="incident.resolved", resource_type="incident", resource_id=str(incident.id), metadata_json={"still_open_tickets_flagged": len(rows)}))
+    await db.commit()
+    await db.refresh(incident)
+    return incident_json(incident)
 
 
 @router.get("/audit-logs")
