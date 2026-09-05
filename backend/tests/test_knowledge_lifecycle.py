@@ -24,7 +24,7 @@ def auth(value: str) -> dict[str, str]:
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_approving_an_article_publishes_a_real_embedded_retrievable_document():
+async def test_approving_an_article_publishes_a_real_embedded_retrievable_document(demo_knowledge_articles):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         manager = await token(client, "kbmanager@demo.com")
         customer = await token(client, "customer@demo.com")
@@ -35,6 +35,7 @@ async def test_approving_an_article_publishes_a_real_embedded_retrievable_docume
         })
         assert generated.status_code == 200, generated.text
         article_id = generated.json()["id"]
+        demo_knowledge_articles.append(article_id)
         assert generated.json()["status"] == "pending_review"
 
         listed = await client.get("/api/knowledge/articles?status_filter=pending_review", headers=auth(manager))
@@ -67,7 +68,46 @@ async def test_approving_an_article_publishes_a_real_embedded_retrievable_docume
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_rejecting_an_article_records_a_reason_and_never_publishes():
+async def test_a_failed_embedding_never_reports_successful_publication(monkeypatch, demo_knowledge_articles):
+    """Regression test for a real bug: publish_knowledge_article used to catch
+    every embedding failure and log it at INFO level, leaving the article
+    marked "published" with a KnowledgeBaseDocument row that had no Embedding
+    row -- genuinely unsearchable despite the API reporting success. Embedding
+    must now be a required step: if it fails, the whole publish fails, the
+    article stays pending_review, and no orphan KnowledgeBaseDocument exists."""
+    import ai.embeddings.knowledge_index as knowledge_index
+
+    async def broken_get_model():
+        raise RuntimeError("simulated model load failure")
+
+    monkeypatch.setattr(knowledge_index, "_get_model", broken_get_model)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        manager = await token(client, "kbmanager@demo.com")
+        unique = uuid4().hex
+        generated = await client.post("/api/knowledge/articles/generate", headers=auth(manager), json={
+            "title": f"Embedding failure test {unique}", "body": "This publish attempt must fail cleanly, not silently succeed unsearchable.",
+        })
+        assert generated.status_code == 200, generated.text
+        article_id = generated.json()["id"]
+        demo_knowledge_articles.append(article_id)
+
+        failed = await client.post(f"/api/knowledge/articles/{article_id}/approve", headers=auth(manager))
+        assert failed.status_code == 502, failed.text
+
+        listed = await client.get("/api/knowledge/articles?status_filter=pending_review", headers=auth(manager))
+        assert any(row["id"] == article_id for row in listed.json()), "the article must remain pending_review, never published, when embedding fails"
+
+        searchable = await client.get("/api/knowledge", headers=auth(manager), params={"q": f"Embedding failure test {unique}"})
+        assert searchable.json() == [], "a failed publish must never leave a retrievable-but-unembedded document behind"
+
+    async with async_session_maker() as db:
+        orphan = await db.scalar(select(KnowledgeBaseDocument).where(KnowledgeBaseDocument.title == f"Embedding failure test {unique}"))
+        assert orphan is None, "a failed publish must not leave an orphan KnowledgeBaseDocument row"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_rejecting_an_article_records_a_reason_and_never_publishes(demo_knowledge_articles):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         manager = await token(client, "kbmanager@demo.com")
         unique = uuid4().hex
@@ -75,6 +115,7 @@ async def test_rejecting_an_article_records_a_reason_and_never_publishes():
             "title": f"Rejected article {unique}", "body": "This draft should never reach the retrieval corpus.",
         })
         article_id = generated.json()["id"]
+        demo_knowledge_articles.append(article_id)
         rejected = await client.post(f"/api/knowledge/articles/{article_id}/reject", headers=auth(manager), json={"reason": "Duplicate of an existing approved article"})
         assert rejected.status_code == 200, rejected.text
         assert rejected.json()["status"] == "rejected"

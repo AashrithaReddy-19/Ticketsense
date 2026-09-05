@@ -58,6 +58,7 @@ function navigationForUser(user: { role:string; public_role?:string; permissions
     ["/admin/engineers", IconSettings, "Engineers", "user:manage"], ["/review", IconAlert, "AI Review", "review:manage"],
     ["/incidents", IconAlert, "Incidents", "incident:manage"], ["/knowledge", IconKnowledge, "Knowledge", "knowledge:manage"],
     ["/admin/playbooks", IconLayers, "Playbooks", "playbook:manage"],
+    ["/admin/safe-actions", IconSparkle, "Safe Actions", "safe_action:execute"],
     ["/analytics", IconChart, "Analytics", "analytics:all"], ["/audit", IconShield, "Audit", "audit:read"],
     ["/settings", IconPlug, "Settings", "integration:manage"],
   ];

@@ -59,6 +59,10 @@ export interface Analytics { total_tickets:number; open_tickets:number; resolved
 export interface Incident { id:string; title:string; service:string; status:string; severity:string; department_id?:string|null; category?:string|null; ticket_count:number; growth_rate:number; common_symptom?:string; detection_reason?:string|null; confirmed_by?:string|null; confirmed_at?:string|null; resolved_at?:string|null; created_at?:string }
 export interface IncidentTicketSummary { id:string; subject:string; status:string; priority:string|null; created_at:string }
 export interface RootCauseHypothesis { incident_id:string; status:"hypothesis"; disclaimer:string; likely_symptom:string|null; recurring_error_codes:Array<{code:string;occurrences:number}>; supporting_ticket_ids:string[]; ticket_count:number }
+export interface SafeActionDefinition { action_key:string; display_name:string; description:string; category:string; risk_level:"low"|"medium"|"high"; required_capability:string; parameter_schema:Record<string,{type:string;required:boolean}>; requires_confirmation:boolean; requires_customer_consent:boolean; enabled:boolean; connector:string; timeout_seconds:number; supports_dry_run:boolean; supports_rollback:boolean }
+export interface SafeActionResultPayload { summary:string; data:Record<string,unknown>; evidence:unknown[]; sandbox:boolean; rollback_available:boolean; rolled_back:boolean }
+export interface SafeActionExecution { id:string; action_key:string; ticket_id:string|null; department_id:string|null; requested_by:string; mode:"preview"|"execute"; status:string; requires_approval:boolean; error_summary:string|null; started_at:string|null; completed_at:string|null; duration_ms:number|null; created_at:string; result?:SafeActionResultPayload }
+export interface SafeActionPreview { action_key:string; mode:"preview"; would_do:string; would_not_do:string; parameters:Record<string,unknown>; risk_level:string; requires_confirmation:boolean; requires_customer_consent:boolean; department_id:string|null }
 export interface KnowledgeArticleSummary { id:string; title:string; status:"draft"|"pending_review"|"published"|"rejected"; version:string; department_id:string|null; source_ticket_ids:string[]; source_signal:string|null; published_knowledge_base_id:string|null; rejected_reason:string|null; created_at:string }
 export interface KnowledgeGapCategory { category:string; count:number; example_ticket_ids?:string[]; average_edit_ratio?:number }
 export interface KnowledgeGaps { window_days:number; weak_evidence_by_category:KnowledgeGapCategory[]; heavy_edit_by_category:KnowledgeGapCategory[] }
@@ -137,6 +141,21 @@ export const api = {
   dismissIncident: (id:string) => request<Incident>(`/api/incidents/${id}/dismiss`, { method: "POST" }),
   notifyIncidentCustomers: (id:string) => request<{incident_id:string;notified:number}>(`/api/incidents/${id}/notify-customers`, { method: "POST" }),
   resolveIncident: (id:string) => request<Incident>(`/api/incidents/${id}/resolve`, { method: "POST" }),
+  safeActions: () => request<SafeActionDefinition[]>("/api/safe-actions"),
+  safeAction: (key:string) => request<SafeActionDefinition>(`/api/safe-actions/${key}`),
+  previewSafeAction: (key:string,payload:{parameters:Record<string,unknown>;ticket_id?:string}) => request<SafeActionPreview>(`/api/safe-actions/${key}/preview`,{method:"POST",body:JSON.stringify(payload)}),
+  executeSafeAction: (key:string,payload:{parameters:Record<string,unknown>;ticket_id?:string;confirm:boolean;customer_consent?:boolean},idempotencyKey:string) =>
+    request<SafeActionExecution>(`/api/safe-actions/${key}/execute`,{method:"POST",body:JSON.stringify(payload),headers:{"Idempotency-Key":idempotencyKey}}),
+  approveSafeActionExecution: (id:string) => request<SafeActionExecution>(`/api/safe-actions/executions/${id}/approve`,{method:"POST"}),
+  rejectSafeActionExecution: (id:string,reason?:string) => request<SafeActionExecution>(`/api/safe-actions/executions/${id}/reject${reason?`?reason=${encodeURIComponent(reason)}`:""}`,{method:"POST"}),
+  safeActionExecutions: (filters?:{ticket_id?:string;action_key?:string}) => {
+    const params = new URLSearchParams();
+    if (filters?.ticket_id) params.set("ticket_id", filters.ticket_id);
+    if (filters?.action_key) params.set("action_key", filters.action_key);
+    const query = params.toString();
+    return request<SafeActionExecution[]>(`/api/safe-actions/executions${query ? `?${query}` : ""}`);
+  },
+  safeActionExecution: (id:string) => request<SafeActionExecution>(`/api/safe-actions/executions/${id}`),
   knowledge: (q="") => request<Array<{id:string;title:string;excerpt:string;source?:string;updated_at:string}>>(`/api/knowledge?${new URLSearchParams({q})}`),
   knowledgeArticles: (statusFilter="") => request<KnowledgeArticleSummary[]>(`/api/knowledge/articles${statusFilter ? `?status_filter=${statusFilter}` : ""}`),
   generateKnowledgeArticle: (payload:{title:string;body:string;source_ticket_ids?:string[]}) => request<{id:string;status:string;title:string}>("/api/knowledge/articles/generate",{method:"POST",body:JSON.stringify(payload)}),

@@ -19,6 +19,7 @@ from app.models.enterprise import (
     TicketDecision, TicketMessage, TicketMessageRead,
 )
 from app.models.playbook import Playbook, PlaybookApplication
+from app.models.safe_action import SafeActionApproval, SafeActionDefinition, SafeActionExecution, SafeActionResult
 
 __all__ = [
     "Base",
@@ -39,4 +40,5 @@ __all__ = [
     "ConfidenceComponent", "AssignmentDecision", "TicketMessage", "TicketMessageRead",
     "ResolutionConfirmation", "DiagnosticPlan", "DiagnosticStep",
     "Playbook", "PlaybookApplication",
+    "SafeActionDefinition", "SafeActionExecution", "SafeActionApproval", "SafeActionResult",
 ]

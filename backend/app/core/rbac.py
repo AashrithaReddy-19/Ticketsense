@@ -15,8 +15,8 @@ ROLE_ALIASES = {
 
 PERMISSIONS: dict[str, frozenset[str]] = {
     "customer": frozenset({"ticket:create", "ticket:read_own", "ticket:comment_public", "ticket:reopen", "ticket:close", "feedback:create"}),
-    "support_agent": frozenset({"ticket:read_department", "ticket:update", "ticket:internal_ai", "ticket:note_internal", "ticket:escalate", "knowledge:read", "message:internal", "diagnostic:manage"}),
-    "reviewer": frozenset({"ticket:read_department", "ticket:internal_ai", "review:manage", "ticket:assign", "ticket:escalate", "knowledge:read", "message:internal", "diagnostic:manage"}),
+    "support_agent": frozenset({"ticket:read_department", "ticket:update", "ticket:internal_ai", "ticket:note_internal", "ticket:escalate", "knowledge:read", "message:internal", "diagnostic:manage", "safe_action:execute"}),
+    "reviewer": frozenset({"ticket:read_department", "ticket:internal_ai", "review:manage", "ticket:assign", "ticket:escalate", "knowledge:read", "message:internal", "diagnostic:manage", "safe_action:execute"}),
     "knowledge_manager": frozenset({"knowledge:read", "knowledge:manage", "knowledge:publish", "knowledge:approve"}),
     "team_lead": frozenset({"ticket:read_department", "ticket:update", "ticket:internal_ai", "ticket:assign", "ticket:escalate", "review:manage", "analytics:department", "knowledge:read", "message:internal", "diagnostic:manage", "assignment:override", "incident:manage", "analytics:all", "playbook:manage"}),
     "system_admin": frozenset({"ticket:read_all", "ticket:update", "ticket:internal_ai", "ticket:assign", "ticket:escalate", "review:manage", "user:manage", "engineer:manage", "department:manage", "tenant:configure", "integration:manage", "system:monitor", "audit:read", "knowledge:manage", "knowledge:approve", "policy:manage", "message:internal", "diagnostic:manage", "assignment:override", "incident:manage", "analytics:all", "safe_action:execute", "playbook:manage"}),

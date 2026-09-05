@@ -50,6 +50,30 @@ async def demo_playbooks():
 
 
 @pytest_asyncio.fixture
+async def demo_knowledge_articles():
+    """Same idea as ``demo_tickets``, for a test that creates a real
+    KnowledgeArticle (draft/approved/rejected) against the shared demo tenant —
+    including one that gets published, which also creates a real
+    knowledge_base row and its embedding (cascade-deleted with it). Missing
+    this fixture on the publish-path test was a real bug: it left 27+ extra
+    "approved" articles in the demo tenant's retrieval corpus across repeated
+    CI/local runs before this fixture existed."""
+    created: list[str] = []
+    yield created
+    if created:
+        ids = [str(i) for i in created]
+        async with async_session_maker() as db:
+            kb_rows = (await db.execute(text(
+                "SELECT published_knowledge_base_id FROM knowledge_articles WHERE id = ANY(:ids) AND published_knowledge_base_id IS NOT NULL"
+            ), {"ids": ids})).all()
+            kb_ids = [str(row[0]) for row in kb_rows]
+            await db.execute(text("DELETE FROM knowledge_articles WHERE id = ANY(:ids)"), {"ids": ids})
+            if kb_ids:
+                await db.execute(text("DELETE FROM knowledge_base WHERE id = ANY(:ids)"), {"ids": kb_ids})
+            await db.commit()
+
+
+@pytest_asyncio.fixture
 async def demo_tickets():
     created: list[str] = []
     yield created

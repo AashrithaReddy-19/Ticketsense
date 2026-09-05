@@ -13,6 +13,7 @@ import { Timeline } from "../components/ui/Utility";
 import { useToast } from "../components/ui/Toast";
 import { buildPipelineStages, ExplainPipeline, PipelineView } from "../components/ui/Pipeline";
 import { useAutoRefresh } from "../lib/useAutoRefresh";
+import SafeActionPanel from "../components/SafeActionPanel";
 
 type Similar = { id: string; subject: string; status: string; similarity: number };
 type Trace = { action: string; detail: Record<string, unknown>; timestamp: string };
@@ -285,6 +286,7 @@ export default function TicketWorkspace() {
                 <Button variant="destructive" disabled={acting} onClick={() => {setReviewAction("escalate");setReason("")}}>Escalate</Button>
               </div>
             )}
+            {hasPermission("safe_action:execute") && <SafeActionPanel ticketId={id} />}
           </aside>
         ) : (
           <aside className="panel ai-panel">

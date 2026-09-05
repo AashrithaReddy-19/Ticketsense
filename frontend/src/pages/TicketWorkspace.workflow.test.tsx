@@ -18,7 +18,7 @@ vi.mock("../api/client", async () => {
       similar: vi.fn(), trace: vi.fn(), groundedDraft: vi.fn(), drafts: vi.fn(), draftComparison: vi.fn(), pipelineTrace: vi.fn(), technicalEntities: vi.fn(), ticketExplanation: vi.fn(), departmentEngineers: vi.fn(),
       startWork: vi.fn(), createResponseDraft: vi.fn(), submitForReview: vi.fn(), reviewResponse: vi.fn(),
       assignTicket: vi.fn(), reopenTicket: vi.fn(), processAttachment: vi.fn(), generateGroundedDraft: vi.fn(),
-      ticketAction: vi.fn(),
+      ticketAction: vi.fn(), safeActions: vi.fn(),
     },
   };
 });
@@ -45,6 +45,7 @@ function mockCommonInternalCalls() {
   vi.mocked(api.pipelineTrace).mockResolvedValue({execution:null,stages:[],claims:[]});
   vi.mocked(api.technicalEntities).mockResolvedValue([]);
   vi.mocked(api.ticketExplanation).mockResolvedValue(null as never);
+  vi.mocked(api.safeActions).mockResolvedValue([]);
 }
 
 function renderWorkspace() {

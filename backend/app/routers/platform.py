@@ -74,7 +74,15 @@ async def approve_article(article_id: UUID, user: User = Depends(get_current_use
     if not article or article.tenant_id != user.tenant_id: raise HTTPException(404, "Article not found")
     if article.status == "published": raise HTTPException(409, "Article is already published")
     if not article.department_id: raise HTTPException(422, "A department must be set before an article can be published")
-    document = await publish_knowledge_article(db, article)
+    from ai.embeddings.knowledge_index import EmbeddingGenerationError
+    try:
+        document = await publish_knowledge_article(db, article)
+    except EmbeddingGenerationError:
+        # publish_knowledge_article's own KnowledgeBaseDocument insert is rolled
+        # back when this session closes without a commit — never leave a
+        # "published" article behind that has no embedding and is therefore
+        # genuinely unsearchable despite reporting success.
+        raise HTTPException(502, "Embedding generation failed; the article was not published. Retry once the embedding provider is available.")
     article.status = "published"; article.approved_by = user.id; article.published_knowledge_base_id = document.id
     db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="knowledge.approved", resource_type="knowledge_article", resource_id=str(article.id), metadata_json={"knowledge_base_id": str(document.id)}))
     await db.commit()
