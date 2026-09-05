@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 
 from app.database import async_session_maker
 from app.models.department import Department
@@ -59,12 +60,26 @@ async def resolved_tickets():
         stored_b = await index_resolution(db, ticket_b)
         await db.commit()
 
-    return {
+    yield {
         "tenant_a": str(tenant_a), "tenant_b": str(tenant_b),
         "dept_a": str(dept_a), "dept_b": str(dept_b),
         "ticket_a": str(ticket_a.id), "ticket_b": str(ticket_b.id),
         "stored": stored_a and stored_b,
     }
+
+    # This fixture previously just `return`d with no teardown at all, permanently
+    # leaking two Organizations (plus departments/users/tickets) into the database
+    # on every module run. ticket_resolution_embeddings.ticket_id cascades on
+    # delete, so removing the tickets is enough to also remove the indexed
+    # resolution embeddings created above.
+    async with async_session_maker() as db:
+        for t in (str(tenant_a), str(tenant_b)):
+            await db.execute(text("DELETE FROM response_drafts WHERE tenant_id=:t"), {"t": t})
+            await db.execute(text("DELETE FROM tickets WHERE tenant_id=:t"), {"t": t})
+            await db.execute(text("DELETE FROM users WHERE tenant_id=:t"), {"t": t})
+            await db.execute(text("DELETE FROM departments WHERE tenant_id=:t"), {"t": t})
+            await db.execute(text("DELETE FROM organizations WHERE id=:t"), {"t": t})
+        await db.commit()
 
 
 def _require_embeddings(resolved_tickets):

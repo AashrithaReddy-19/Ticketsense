@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.security import hash_password
 from app.database import async_session_maker
@@ -32,6 +32,37 @@ async def token(client: AsyncClient, email: str) -> str:
 
 def auth(value: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {value}"}
+
+
+async def teardown_playbook_gate_tenant(tenant_id) -> None:
+    """Same dependency-order unwind as test_resolution_policy_and_assignment.py's
+    teardown_tenant -- this test builds its own one-off tenant inline (not via a
+    shared fixture) and previously never cleaned it up at all, leaking a new
+    Organization (plus department/users/playbook/ticket) into the database on
+    every single test run."""
+    t = str(tenant_id)
+    async with async_session_maker() as db:
+        await db.execute(text("DELETE FROM confidence_components WHERE ticket_decision_id IN (SELECT id FROM ticket_decisions WHERE tenant_id=:t)"), {"t": t})
+        await db.execute(text("DELETE FROM pipeline_stages WHERE execution_id IN (SELECT id FROM pipeline_executions WHERE tenant_id=:t)"), {"t": t})
+        await db.execute(text("DELETE FROM diagnostic_steps WHERE plan_id IN (SELECT id FROM diagnostic_plans WHERE tenant_id=:t)"), {"t": t})
+        await db.execute(text("DELETE FROM ticket_message_reads WHERE message_id IN (SELECT id FROM ticket_messages WHERE tenant_id=:t)"), {"t": t})
+        await db.execute(text("DELETE FROM ticket_history WHERE ticket_id IN (SELECT id FROM tickets WHERE tenant_id=:t)"), {"t": t})
+        for table in ("ticket_decisions", "assignment_decisions", "diagnostic_plans", "ticket_messages",
+                      "resolution_confirmations", "department_resolution_policies", "pipeline_executions",
+                      "ai_drafts", "response_drafts", "ticket_events", "claim_validations",
+                      "technical_entities", "ai_decisions", "audit_logs", "notifications", "playbooks"):
+            await db.execute(text(f"DELETE FROM {table} WHERE tenant_id=:t"), {"t": t})
+        await db.execute(text("DELETE FROM engineer_departments WHERE user_id IN (SELECT id FROM users WHERE tenant_id=:t)"), {"t": t})
+        await db.execute(text("DELETE FROM engineer_specializations WHERE user_id IN (SELECT id FROM users WHERE tenant_id=:t)"), {"t": t})
+        await db.execute(text("DELETE FROM engineer_skills WHERE tenant_id=:t"), {"t": t})
+        await db.execute(text("DELETE FROM engineer_profiles WHERE tenant_id=:t"), {"t": t})
+        await db.execute(text("DELETE FROM tickets WHERE tenant_id=:t"), {"t": t})
+        await db.execute(text("DELETE FROM user_roles WHERE tenant_id=:t"), {"t": t})
+        await db.execute(text("DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE tenant_id=:t)"), {"t": t})
+        await db.execute(text("DELETE FROM users WHERE tenant_id=:t"), {"t": t})
+        await db.execute(text("DELETE FROM departments WHERE tenant_id=:t"), {"t": t})
+        await db.execute(text("DELETE FROM organizations WHERE id=:t"), {"t": t})
+        await db.commit()
 
 
 def playbook_payload(key: str, category: str, auto_eligible: bool = False) -> dict:
@@ -99,68 +130,71 @@ async def test_matched_playbook_ineligible_for_auto_resolution_forces_human_revi
     suffix = uuid4().hex
     tenant_id, department_id = uuid4(), uuid4()
     customer_id, engineer_id, admin_id = uuid4(), uuid4(), uuid4()
-    async with async_session_maker() as db:
-        db.add(Organization(id=tenant_id, name=f"Playbook Gate Tenant {suffix}", slug=f"playbook-gate-{suffix}"))
-        await db.flush()
-        db.add(Department(id=department_id, tenant_id=tenant_id, name=f"Networking {suffix}"))
-        await db.flush()
-        db.add_all([
-            User(id=customer_id, tenant_id=tenant_id, email=f"customer-{suffix}@example.test", full_name="Customer", role="customer", public_role="customer", hashed_password=hash_password("x")),
-            User(id=engineer_id, tenant_id=tenant_id, department_id=department_id, email=f"engineer-{suffix}@example.test", full_name="Engineer", role="support_agent", public_role="engineer", hashed_password=hash_password("x"), is_active=True, is_available=True, max_active_workload=10),
-            User(id=admin_id, tenant_id=tenant_id, email=f"admin-{suffix}@example.test", full_name="Admin", role="system_admin", public_role="admin", hashed_password=hash_password("x")),
-        ])
-        await db.flush()
-        db.add(EngineerDepartment(user_id=engineer_id, department_id=department_id))
-        db.add(EngineerProfile(user_id=engineer_id, tenant_id=tenant_id, availability_status="available", max_weighted_capacity=10.0))
-        db.add(EngineerSkill(tenant_id=tenant_id, user_id=engineer_id, department_id=department_id, specialization="VPN Engineer", skill_level="expert", is_primary=True))
+    try:
+        async with async_session_maker() as db:
+            db.add(Organization(id=tenant_id, name=f"Playbook Gate Tenant {suffix}", slug=f"playbook-gate-{suffix}"))
+            await db.flush()
+            db.add(Department(id=department_id, tenant_id=tenant_id, name=f"Networking {suffix}"))
+            await db.flush()
+            db.add_all([
+                User(id=customer_id, tenant_id=tenant_id, email=f"customer-{suffix}@example.test", full_name="Customer", role="customer", public_role="customer", hashed_password=hash_password("x")),
+                User(id=engineer_id, tenant_id=tenant_id, department_id=department_id, email=f"engineer-{suffix}@example.test", full_name="Engineer", role="support_agent", public_role="engineer", hashed_password=hash_password("x"), is_active=True, is_available=True, max_active_workload=10),
+                User(id=admin_id, tenant_id=tenant_id, email=f"admin-{suffix}@example.test", full_name="Admin", role="system_admin", public_role="admin", hashed_password=hash_password("x")),
+            ])
+            await db.flush()
+            db.add(EngineerDepartment(user_id=engineer_id, department_id=department_id))
+            db.add(EngineerProfile(user_id=engineer_id, tenant_id=tenant_id, availability_status="available", max_weighted_capacity=10.0))
+            db.add(EngineerSkill(tenant_id=tenant_id, user_id=engineer_id, department_id=department_id, specialization="VPN Engineer", skill_level="expert", is_primary=True))
 
-        from app.models.enterprise import DepartmentResolutionPolicy
-        db.add(DepartmentResolutionPolicy(tenant_id=tenant_id, department_id=None, category=None, risk_class=None, version=1,
-                                           allow_auto_resolution=True, auto_resolve_threshold=0.0, minimum_citation_coverage=0.0,
-                                           minimum_retrieval_score=0.0, minimum_classification_confidence=0.0, minimum_classification_margin=0.0,
-                                           auto_resolution_allowlist=["vpn"], sensitive_category_denylist=[], is_active=True,
-                                           updated_by=admin_id, reason="Permissive test policy"))
+            from app.models.enterprise import DepartmentResolutionPolicy
+            db.add(DepartmentResolutionPolicy(tenant_id=tenant_id, department_id=None, category=None, risk_class=None, version=1,
+                                               allow_auto_resolution=True, auto_resolve_threshold=0.0, minimum_citation_coverage=0.0,
+                                               minimum_retrieval_score=0.0, minimum_classification_confidence=0.0, minimum_classification_margin=0.0,
+                                               auto_resolution_allowlist=["vpn"], sensitive_category_denylist=[], is_active=True,
+                                               updated_by=admin_id, reason="Permissive test policy"))
 
-        playbook = Playbook(tenant_id=tenant_id, playbook_key="vpn_test_ineligible", title="VPN test (ineligible)", category="vpn",
-                            version=1, status="active", auto_resolution_eligible=False, created_by=admin_id, approved_by=admin_id)
-        db.add(playbook)
-        await db.flush()
-        demo_playbooks.append(str(playbook.id))
+            playbook = Playbook(tenant_id=tenant_id, playbook_key="vpn_test_ineligible", title="VPN test (ineligible)", category="vpn",
+                                version=1, status="active", auto_resolution_eligible=False, created_by=admin_id, approved_by=admin_id)
+            db.add(playbook)
+            await db.flush()
+            demo_playbooks.append(str(playbook.id))
 
-        ticket = Ticket(tenant_id=tenant_id, submitted_by=customer_id, department_id=department_id,
-                         subject="VPN keeps disconnecting", description="The VPN client disconnects every few minutes on Windows 11.",
-                         status="ai_processing", priority="medium", sentiment="neutral")
-        db.add(ticket)
-        await db.flush()
+            ticket = Ticket(tenant_id=tenant_id, submitted_by=customer_id, department_id=department_id,
+                             subject="VPN keeps disconnecting", description="The VPN client disconnects every few minutes on Windows 11.",
+                             status="ai_processing", priority="medium", sentiment="neutral")
+            db.add(ticket)
+            await db.flush()
 
-        evidence = [{"citation_id": "KB-001", "chunk_text": "Reset the cached VPN credentials and reconnect.",
-                     "status": "approved", "is_publishable": True, "article_version": "1.0", "similarity": 0.9,
-                     "tenant_id": str(tenant_id), "department_id": str(department_id)}]
-        draft = AIDraft(tenant_id=tenant_id, ticket_id=ticket.id, department_id=department_id, article_version="1.0",
-                         draft_text="Reset the cached VPN credentials and reconnect. [KB-001]", citations=[{"citation_id": "KB-001"}],
-                         evidence=evidence, generation_status="ready", citation_validation_status="valid",
-                         validation_details={"confidence_score": 0.95, "confidence_features": {"classification_probability": 0.95, "classification_margin": 0.5},
-                                              "citation_coverage": 1.0, "valid": True, "grounding": {"blocked": False, "overall_status": "Grounded"}})
-        db.add(draft)
-        execution = PipelineExecution(tenant_id=tenant_id, ticket_id=ticket.id, pipeline_version="test-1.0", trigger_type="test",
-                                       status="completed", started_at=datetime.now(timezone.utc), completed_at=datetime.now(timezone.utc),
-                                       fallback_used=False, correlation_id=uuid4())
-        db.add(execution)
-        await db.flush()
-        draft.validation_details = {**draft.validation_details, "execution_id": str(execution.id)}
-        await db.commit()
+            evidence = [{"citation_id": "KB-001", "chunk_text": "Reset the cached VPN credentials and reconnect.",
+                         "status": "approved", "is_publishable": True, "article_version": "1.0", "similarity": 0.9,
+                         "tenant_id": str(tenant_id), "department_id": str(department_id)}]
+            draft = AIDraft(tenant_id=tenant_id, ticket_id=ticket.id, department_id=department_id, article_version="1.0",
+                             draft_text="Reset the cached VPN credentials and reconnect. [KB-001]", citations=[{"citation_id": "KB-001"}],
+                             evidence=evidence, generation_status="ready", citation_validation_status="valid",
+                             validation_details={"confidence_score": 0.95, "confidence_features": {"classification_probability": 0.95, "classification_margin": 0.5},
+                                                  "citation_coverage": 1.0, "valid": True, "grounding": {"blocked": False, "overall_status": "Grounded"}})
+            db.add(draft)
+            execution = PipelineExecution(tenant_id=tenant_id, ticket_id=ticket.id, pipeline_version="test-1.0", trigger_type="test",
+                                           status="completed", started_at=datetime.now(timezone.utc), completed_at=datetime.now(timezone.utc),
+                                           fallback_used=False, correlation_id=uuid4())
+            db.add(execution)
+            await db.flush()
+            draft.validation_details = {**draft.validation_details, "execution_id": str(execution.id)}
+            await db.commit()
 
-        matched = await match_playbook(db, ticket, category="vpn")
-        assert matched is not None and matched.id == playbook.id
+            matched = await match_playbook(db, ticket, category="vpn")
+            assert matched is not None and matched.id == playbook.id
 
-        decision = await process_resolution_decision(db, ticket)
-        await db.commit()
-        assert decision.decision != "auto_resolve", decision.failed_gates
-        assert "playbook_compatible" in decision.failed_gates
+            decision = await process_resolution_decision(db, ticket)
+            await db.commit()
+            assert decision.decision != "auto_resolve", decision.failed_gates
+            assert "playbook_compatible" in decision.failed_gates
 
-    async with async_session_maker() as db:
-        await db.execute(select(Ticket).where(Ticket.id == ticket.id))  # sanity: ticket still resolvable in a fresh session
-        await db.execute(select(Playbook).where(Playbook.id == playbook.id))
+        async with async_session_maker() as db:
+            await db.execute(select(Ticket).where(Ticket.id == ticket.id))  # sanity: ticket still resolvable in a fresh session
+            await db.execute(select(Playbook).where(Playbook.id == playbook.id))
+    finally:
+        await teardown_playbook_gate_tenant(tenant_id)
 
 
 @pytest.mark.asyncio(loop_scope="session")

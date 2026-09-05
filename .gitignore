@@ -36,3 +36,6 @@ Thumbs.db
 
 # Docker
 db_data/
+
+# Database backups (pg_dump output from db/maintenance scripts -- never commit real data)
+db/maintenance/backups/
