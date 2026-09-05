@@ -14,6 +14,7 @@ import { AIMetrics, Audit, Integrations } from "./pages/AdminData";
 import KnowledgePipeline from "./pages/KnowledgePipeline";
 import AdminEngineers from "./pages/AdminEngineers";
 import AdminKnowledge from "./pages/AdminKnowledge";
+import AdminPlaybooks from "./pages/AdminPlaybooks";
 import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import AdminPortal from "./pages/AdminPortal";
 import { Loading } from "./components/States";
@@ -74,6 +75,7 @@ export function Protected() {
     <Route path="/operations" element={<Navigate to="/admin" replace />} />
     <Route path="/review" element={<CapabilityRoute anyOf={["review:manage"]}><RoleQueue /></CapabilityRoute>} />
     <Route path="/admin/engineers" element={<CapabilityRoute anyOf={["user:manage"]}><AdminEngineers /></CapabilityRoute>} />
+    <Route path="/admin/playbooks" element={<CapabilityRoute anyOf={["playbook:manage"]}><AdminPlaybooks /></CapabilityRoute>} />
     <Route path="/analytics" element={<CapabilityRoute anyOf={["analytics:department", "analytics:all", "ticket:internal_ai"]}><AnalyticsDashboard /></CapabilityRoute>} />
     <Route path="/tickets" element={<Tickets />} />
     <Route path="/queue" element={<Tickets />} />

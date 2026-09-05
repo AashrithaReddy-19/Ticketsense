@@ -18,6 +18,7 @@ from app.models.enterprise import (
     DiagnosticStep, EngineerProfile, EngineerSkill, ResolutionConfirmation,
     TicketDecision, TicketMessage, TicketMessageRead,
 )
+from app.models.playbook import Playbook, PlaybookApplication
 
 __all__ = [
     "Base",
@@ -37,4 +38,5 @@ __all__ = [
     "EngineerProfile", "EngineerSkill", "DepartmentResolutionPolicy", "TicketDecision",
     "ConfidenceComponent", "AssignmentDecision", "TicketMessage", "TicketMessageRead",
     "ResolutionConfirmation", "DiagnosticPlan", "DiagnosticStep",
+    "Playbook", "PlaybookApplication",
 ]

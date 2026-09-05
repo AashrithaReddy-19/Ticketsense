@@ -100,6 +100,68 @@ async def main() -> None:
                 await conn.execute("""INSERT INTO department_resolution_policies(tenant_id,department_id,version,allow_auto_resolution,auto_resolve_threshold,minimum_citation_coverage,minimum_retrieval_score,minimum_classification_confidence,minimum_classification_margin,auto_resolution_allowlist,sensitive_category_denylist,updated_by,reason)
                   VALUES($1,$2,1,$3,$4,.8,.65,.75,.15,$5::jsonb,$6::jsonb,$7,'Deterministic demonstration policy; all safety gates remain mandatory')""",
                   tenant_id, department_ids[department_name], bool(allowlist), threshold, __import__("json").dumps(allowlist), __import__("json").dumps(sensitive), admin_id)
+        if not await conn.fetchval("SELECT EXISTS(SELECT 1 FROM playbooks WHERE tenant_id=$1)", tenant_id):
+            import json as _json
+            playbook_defs = (
+                ("vpn_connection_failure", "VPN Connection Failure", "vpn", ["vpn-809", "vpn-401"],
+                 ["What error code or message is displayed?", "Which VPN client and version?", "Did this work before, or is it a new setup?"],
+                 ["Confirmed VPN client version", "Confirmed error code"],
+                 [{"title": "Confirm credentials", "instruction": "Verify the customer's account is active and the password is current.", "evidence_required": True},
+                  {"title": "Clear cached session", "instruction": "Have the customer clear the VPN client's cached session and reconnect.", "safety_warning": None, "evidence_required": False},
+                  {"title": "Check client version", "instruction": "Confirm the VPN client is on a supported version; upgrade if not.", "evidence_required": False}],
+                 ["Resend VPN client installer link"], ["Never ask the customer for their password in plain text"],
+                 "Your VPN issue has been resolved by clearing the cached session and reconnecting with the current client version.",
+                 ["Escalate if the account shows repeated failed logins (possible lockout or compromise)"], True),
+                ("sap_authorization_error", "SAP Authorization Error", "sap", ["me023", "st22"],
+                 ["Which transaction code (T-code) fails?", "What is the exact error message?", "Was this access previously granted?"],
+                 ["Confirmed T-code", "Confirmed role/authorization object"],
+                 [{"title": "Identify missing authorization object", "instruction": "Use SU53 or the error detail to identify the missing authorization object.", "evidence_required": True},
+                  {"title": "Confirm role assignment", "instruction": "Check whether the customer's role includes the required authorization.", "evidence_required": False}],
+                 ["Generate role-request template for SAP Basis team"], ["Never grant SAP_ALL or broad authorization as a shortcut"],
+                 "Your SAP access issue requires a role change; a request has been routed to the SAP Basis team.",
+                 ["Escalate to SAP Basis if the fix requires a production role change"], False),
+                ("payment_failure", "Payment Failure", "payment", ["decline-51", "decline-05"],
+                 ["What was the exact decline code or message?", "Was this a one-time or recurring charge?", "Has the customer contacted their bank?"],
+                 ["Confirmed decline code", "Confirmed transaction ID"],
+                 [{"title": "Confirm transaction status", "instruction": "Look up the transaction ID in the payment processor's dashboard.", "evidence_required": True},
+                  {"title": "Check for duplicate charges", "instruction": "Confirm whether the customer was charged more than once for the same transaction.", "evidence_required": True}],
+                 [], ["Never share full card numbers or CVV in any note or response", "Payment issues are never auto-resolved"],
+                 None, ["Always escalate confirmed duplicate charges or suspected fraud to Payments"], False),
+                ("password_reset", "Password Reset", "general_it", [],
+                 ["Which system or application is the password for?", "Has the customer tried the self-service reset link?"],
+                 ["Confirmed identity via existing verification flow"],
+                 [{"title": "Verify identity", "instruction": "Confirm the request came from the account owner via the existing verification flow.", "evidence_required": True},
+                  {"title": "Send reset link", "instruction": "Trigger the standard password-reset email flow for the affected system.", "evidence_required": False}],
+                 ["Resend verification/reset notification"], ["Never reset a password without identity verification", "Never send a temporary password in plain text chat"],
+                 "A password reset link has been sent to your verified email address.",
+                 ["Escalate if the account shows signs of compromise"], True),
+                ("email_sync_failure", "Email Synchronization Failure", "general_it", [],
+                 ["Which email client and device?", "Does the error mention a specific folder or all mail?", "When did sync last work?"],
+                 ["Confirmed client/device", "Confirmed error message"],
+                 [{"title": "Check account status", "instruction": "Confirm the mailbox is active and not over quota.", "evidence_required": True},
+                  {"title": "Re-authenticate client", "instruction": "Have the customer remove and re-add the account in the mail client.", "evidence_required": False}],
+                 ["Check mailbox quota status"], ["Never disclose another user's mailbox contents while troubleshooting"],
+                 "Email sync has been restored by re-authenticating the mail client.",
+                 ["Escalate if the mailbox shows signs of a compromised account"], True),
+                ("cloud_access_request", "Cloud Access Request", "cloud", [],
+                 ["Which cloud resource or project needs access?", "What level of access is required (read/write/admin)?", "Who approved this request?"],
+                 ["Confirmed resource identifier", "Confirmed approver"],
+                 [{"title": "Confirm approval", "instruction": "Verify a manager or resource owner approved the access request.", "evidence_required": True},
+                  {"title": "Apply least-privilege role", "instruction": "Grant the minimum IAM role that satisfies the request.", "evidence_required": False}],
+                 ["Generate IAM role-grant template for review"], ["Never grant broad/admin access without explicit documented approval"],
+                 None, ["Escalate any request for production admin access"], False),
+            )
+            for key, title, category, codes, questions, evidence, steps, actions, warnings, template, escalation, auto_eligible in playbook_defs:
+                playbook_id = await conn.fetchval(
+                    """INSERT INTO playbooks(tenant_id,playbook_key,title,category,version,status,applicable_error_codes,
+                       clarification_questions,evidence_requirements,diagnostic_steps_template,approved_actions,safety_warnings,
+                       resolution_template,escalation_rules,auto_resolution_eligible,created_by,approved_by,reason)
+                       VALUES($1,$2,$3,$4,1,'active',$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14,$14,'Seeded demonstration playbook')
+                       RETURNING id""",
+                    tenant_id, key, title, category, _json.dumps(codes), _json.dumps(questions), _json.dumps(evidence),
+                    _json.dumps(steps), _json.dumps(actions), _json.dumps(warnings), template, _json.dumps(escalation),
+                    auto_eligible, admin_id,
+                )
         if not await conn.fetchval("SELECT EXISTS(SELECT 1 FROM sla_policies WHERE tenant_id=$1)", tenant_id):
             for priority, response_minutes, resolution_minutes in (
                 ("urgent", 15, 4 * 60), ("high", 30, 8 * 60), ("medium", 120, 24 * 60), ("low", 480, 72 * 60),

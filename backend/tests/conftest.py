@@ -36,6 +36,20 @@ async def demo_users():
 
 
 @pytest_asyncio.fixture
+async def demo_playbooks():
+    """Same idea as ``demo_tickets``, for a test that creates real playbook rows
+    (and their applications) against the shared demo tenant."""
+    created: list[str] = []
+    yield created
+    if created:
+        ids = [str(i) for i in created]
+        async with async_session_maker() as db:
+            await db.execute(text("DELETE FROM playbook_applications WHERE playbook_id = ANY(:ids)"), {"ids": ids})
+            await db.execute(text("DELETE FROM playbooks WHERE id = ANY(:ids)"), {"ids": ids})
+            await db.commit()
+
+
+@pytest_asyncio.fixture
 async def demo_tickets():
     created: list[str] = []
     yield created

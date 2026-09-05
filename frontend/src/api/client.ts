@@ -62,6 +62,9 @@ export interface KnowledgeGapCategory { category:string; count:number; example_t
 export interface KnowledgeGaps { window_days:number; weak_evidence_by_category:KnowledgeGapCategory[]; heavy_edit_by_category:KnowledgeGapCategory[] }
 export interface KnowledgeHealthArticle { id:string; title:string; department_id:string|null; version:string; age_days:number|null; stale:boolean }
 export interface KnowledgeHealth { stale_after_days:number; articles:KnowledgeHealthArticle[] }
+export interface PlaybookStep { title:string; instruction:string; safety_warning?:string|null; evidence_required:boolean }
+export interface Playbook { id:string; playbook_key:string; title:string; category:string; version:number; status:"draft"|"approved"|"active"|"inactive"|"superseded"; applicable_error_codes:string[]; clarification_questions:string[]; evidence_requirements:string[]; diagnostic_steps_template:PlaybookStep[]; approved_actions:string[]; safety_warnings:string[]; resolution_template:string|null; escalation_rules:string[]; auto_resolution_eligible:boolean; superseded_by_id:string|null; reason:string|null; created_at:string; updated_at:string }
+export interface PlaybookCreate { playbook_key:string; title:string; category:string; applicable_error_codes?:string[]; clarification_questions?:string[]; evidence_requirements?:string[]; diagnostic_steps_template?:PlaybookStep[]; approved_actions?:string[]; safety_warnings?:string[]; resolution_template?:string|null; escalation_rules?:string[]; auto_resolution_eligible?:boolean; reason:string }
 export interface Notification { id:string; title:string; message:string; kind:string; is_read:boolean; created_at:string }
 export interface QueueTicket {id:string;display_id:string;title:string;requester_id:string;department_id:string|null;assignee_id:string|null;status:string;priority:string;sla_state:string;created_at:string;updated_at:string;analysis_status:string;review_required:boolean;review_reason?:string;confidence_band:string;risk:string}
 export interface QueueResponse {items:QueueTicket[];page:number;page_size:number;total:number;queue_type:string}
@@ -132,6 +135,14 @@ export const api = {
   rejectKnowledgeArticle: (id:string,reason:string) => request<{id:string;status:string}>(`/api/knowledge/articles/${id}/reject`,{method:"POST",body:JSON.stringify({reason})}),
   knowledgeGaps: (days?:number) => request<KnowledgeGaps>(`/api/knowledge/gaps${days ? `?days=${days}` : ""}`),
   knowledgeHealth: (staleAfterDays?:number) => request<KnowledgeHealth>(`/api/knowledge/health${staleAfterDays ? `?stale_after_days=${staleAfterDays}` : ""}`),
+  playbooks: (statusFilter="") => request<Playbook[]>(`/api/playbooks${statusFilter ? `?status_filter=${statusFilter}` : ""}`),
+  createPlaybook: (payload:PlaybookCreate) => request<Playbook>("/api/playbooks",{method:"POST",body:JSON.stringify(payload)}),
+  newPlaybookVersion: (id:string,payload:PlaybookCreate) => request<Playbook>(`/api/playbooks/${id}/version`,{method:"POST",body:JSON.stringify(payload)}),
+  approvePlaybook: (id:string) => request<Playbook>(`/api/playbooks/${id}/approve`,{method:"POST"}),
+  activatePlaybook: (id:string) => request<Playbook>(`/api/playbooks/${id}/activate`,{method:"POST"}),
+  deactivatePlaybook: (id:string) => request<Playbook>(`/api/playbooks/${id}/deactivate`,{method:"POST"}),
+  recommendedPlaybook: (ticketId:string) => request<Playbook>(`/api/tickets/${ticketId}/recommended-playbook`),
+  applyPlaybook: (ticketId:string,playbookId:string) => request<{diagnostic_plan_id:string;playbook_id:string;step_count:number}>(`/api/tickets/${ticketId}/playbooks/${playbookId}/apply`,{method:"POST"}),
   notifications: () => request<Notification[]>("/api/notifications"),
   markNotificationRead: (id:string) => request<{id:string;is_read:boolean}>(`/api/notifications/${id}/read`,{method:"POST"}),
   auditLogs: () => request<Array<Record<string,unknown>>>("/api/audit-logs"),

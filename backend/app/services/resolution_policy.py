@@ -16,6 +16,7 @@ from app.models.platform import Notification
 from app.models.response_draft import ResponseDraft
 from app.models.ticket import Ticket
 from app.models.ticket_attachment import TicketAttachment
+from app.services.playbooks import match_playbook, normalize_category, playbook_gate, record_recommendation
 from app.services.workflow import PUBLIC_MESSAGES, auto_assign_ticket, next_version, record_event, transition
 
 
@@ -33,21 +34,6 @@ class Gate:
     threshold: float | None = None
     detail: str = ""
 
-
-def normalize_category(ticket: Ticket) -> str:
-    text = f"{ticket.category or ''} {ticket.subject} {ticket.description}".lower()
-    for category, terms in (
-        ("vpn", ("vpn", "virtual private network")),
-        ("payment", ("payment", "billing", "transaction")),
-        ("security", ("security", "breach", "credential", "malware")),
-        ("sap", ("sap", "tcode", "idoc")),
-        ("cloud", ("cloud", "aws", "azure", "s3", "ec2")),
-        ("hr_systems", ("payroll", "leave", "hr system")),
-        ("network", ("network", "dns", "wifi", "firewall")),
-    ):
-        if any(term in text for term in terms):
-            return category
-    return "general_it"
 
 
 async def applicable_policy(db: AsyncSession, ticket: Ticket, category: str) -> DepartmentResolutionPolicy | None:
@@ -94,6 +80,10 @@ async def evaluate_resolution_gates(db: AsyncSession, ticket: Ticket, draft: AID
     min_retrieval = float(policy.minimum_retrieval_score) if policy else .65
     min_coverage = float(policy.minimum_citation_coverage) if policy else .8
     fingerprint = sha256((draft.draft_text or "").strip().encode("utf-8")).hexdigest() if draft.draft_text else ""
+    matched_playbook = await match_playbook(db, ticket, category=category)
+    if matched_playbook is not None:
+        await record_recommendation(db, ticket, matched_playbook)
+    playbook_passed, playbook_detail = playbook_gate(matched_playbook)
     gates = [
         Gate("policy_enabled", bool(policy and policy.allow_auto_resolution), detail="A versioned policy explicitly enables automatic resolution"),
         Gate("category_allowlisted", category in allowlist, detail=f"Category is {category}"),
@@ -112,6 +102,7 @@ async def evaluate_resolution_gates(db: AsyncSession, ticket: Ticket, draft: AID
         Gate("attachment_quality", ocr_ok, score=float(attachment.ocr_confidence) if attachment and attachment.ocr_confidence is not None else None, threshold=.6 if attachment and attachment.ocr_confidence_available else None),
         Gate("pipeline_complete", bool(execution and execution.status in {"completed", "completed_with_fallback"}) and draft.generation_status == "ready", detail=f"Pipeline status: {execution.status if execution else 'missing'}"),
         Gate("immutable_response_available", bool(draft.draft_text and draft.citations), detail="A cited draft must exist before publication"),
+        Gate("playbook_compatible", playbook_passed, detail=playbook_detail),
         Gate("no_immediate_repeat", not bool(fingerprint and fingerprint == ticket.last_auto_resolution_fingerprint), detail="A rejected answer cannot immediately auto-publish again"),
     ]
     return policy, category, gates, fingerprint

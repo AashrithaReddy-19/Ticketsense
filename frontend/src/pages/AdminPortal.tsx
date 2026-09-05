@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { IconAlert, IconChart, IconKnowledge, IconPlug, IconQueue, IconSettings, IconShield } from "../components/icons";
+import { IconAlert, IconChart, IconKnowledge, IconLayers, IconPlug, IconQueue, IconSettings, IconShield } from "../components/icons";
 
 const modules = [
   { capability: "ticket:read_all", to: "/tickets", title: "Tickets & queues", detail: "Assignment, escalation, reopened, SLA-risk and failed-processing work.", icon: IconQueue },
@@ -8,6 +8,7 @@ const modules = [
   { capability: "review:manage", to: "/review", title: "AI review", detail: "Review drafts, grounding warnings and low-confidence decisions.", icon: IconAlert },
   { capability: "incident:manage", to: "/incidents", title: "Incidents", detail: "Investigate tenant-scoped ticket clusters and emerging incidents.", icon: IconAlert },
   { capability: "knowledge:manage", to: "/knowledge", title: "Knowledge", detail: "Govern approved, versioned and publishable support evidence.", icon: IconKnowledge },
+  { capability: "playbook:manage", to: "/admin/playbooks", title: "Playbooks", detail: "Versioned resolution playbooks for recurring issues, gated by the policy engine.", icon: IconLayers },
   { capability: "analytics:all", to: "/analytics", title: "Analytics", detail: "Live operational, confidence, workflow and workload metrics.", icon: IconChart },
   { capability: "audit:read", to: "/audit", title: "Audit & compliance", detail: "Search immutable security and workflow events.", icon: IconShield },
   { capability: "integration:manage", to: "/integrations", title: "Settings & integrations", detail: "Inspect connector status without exposing stored configuration.", icon: IconPlug },
