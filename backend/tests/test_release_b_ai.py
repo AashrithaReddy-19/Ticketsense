@@ -91,7 +91,7 @@ def test_grounding_validator_marks_direct_opposite_claim_contradicted():
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_release_b_trace_entities_explanation_and_customer_denial():
+async def test_release_b_trace_entities_explanation_and_customer_denial(demo_tickets):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         async def login(email):
             response=await client.post("/api/auth/login",data={"username":email,"password":"Demo@123"})
@@ -99,7 +99,7 @@ async def test_release_b_trace_entities_explanation_and_customer_denial():
             return {"Authorization":f"Bearer {response.json()['access_token']}"}
         customer=await login("customer@demo.com");lead=await login("teamlead@demo.com");agent=await login("agent@demo.com");reviewer=await login("reviewer@demo.com");auditor=await login("auditor@demo.com");knowledge=await login("kbmanager@demo.com")
         created=await client.post("/api/tickets",headers=customer,json={"subject":"VPN-809 on Windows 11","description":"Unable to connect to the company VPN on Windows 11. Error code VPN-809 appears after entering credentials. Restarting the laptop did not solve the issue."})
-        assert created.status_code==201,created.text;ticket_id=created.json()["id"]
+        assert created.status_code==201,created.text;ticket_id=created.json()["id"];demo_tickets.append(ticket_id)
         generated=await client.post(f"/api/tickets/{ticket_id}/ai-draft/generate",headers=lead,json={"article_version":"1.0"})
         assert generated.status_code==200,generated.text
         assert generated.json()["draft_text"],generated.text
@@ -138,7 +138,7 @@ async def test_release_b_trace_entities_explanation_and_customer_denial():
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_failed_pipeline_execution_is_persisted(monkeypatch):
+async def test_failed_pipeline_execution_is_persisted(monkeypatch, demo_tickets):
     import ai.graph as graph_module
 
     class BrokenGraph:
@@ -154,7 +154,7 @@ async def test_failed_pipeline_execution_is_persisted(monkeypatch):
             return {"Authorization":f"Bearer {response.json()['access_token']}"}
         customer=await login("customer@demo.com");lead=await login("teamlead@demo.com")
         created=await client.post("/api/tickets",headers=customer,json={"subject":"VPN pipeline failure test","description":"VPN-809 on Windows 11 must remain safely submitted."})
-        ticket_id=created.json()["id"]
+        ticket_id=created.json()["id"];demo_tickets.append(ticket_id)
         generated=await client.post(f"/api/tickets/{ticket_id}/ai-draft/generate",headers=lead,json={"article_version":"1.0"})
         assert generated.status_code==200
         assert generated.json()["generation_status"]=="failed"

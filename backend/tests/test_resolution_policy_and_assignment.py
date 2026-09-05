@@ -319,13 +319,14 @@ async def test_weighted_assignment_prefers_matching_skill_over_generalist_at_cap
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_internal_message_is_never_visible_or_postable_by_customer():
+async def test_internal_message_is_never_visible_or_postable_by_customer(demo_tickets):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         customer = await token(client, "customer@demo.com")
         engineer = await token(client, "agent@demo.com")
         created = await client.post("/api/tickets", headers=auth(customer), json={"subject": "VPN internal note leakage check", "description": "The corporate VPN client keeps disconnecting; verifying internal engineer notes never reach the customer view."})
         assert created.status_code == 201, created.text
         ticket_id = created.json()["id"]
+        demo_tickets.append(ticket_id)
 
         public_message = await client.post(f"/api/tickets/{ticket_id}/messages", headers=auth(customer), json={"body": "Hello, any update?", "visibility": "public"})
         assert public_message.status_code == 201, public_message.text
@@ -345,12 +346,13 @@ async def test_internal_message_is_never_visible_or_postable_by_customer():
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_resolution_confirmation_reopen_is_idempotent_and_customer_only():
+async def test_resolution_confirmation_reopen_is_idempotent_and_customer_only(demo_tickets):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         customer = await token(client, "customer@demo.com")
         engineer = await token(client, "agent@demo.com")
         created = await client.post("/api/tickets", headers=auth(customer), json={"subject": "VPN resolution confirmation check", "description": "Confirming the resolution-confirmation endpoint behaves safely."})
         ticket_id = created.json()["id"]
+        demo_tickets.append(ticket_id)
 
         async with async_session_maker() as db:
             ticket = await db.get(Ticket, UUID(ticket_id))

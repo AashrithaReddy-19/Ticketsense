@@ -18,7 +18,7 @@ def auth(token: str) -> dict[str, str]:
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_ticket_creation_records_pipeline_stage_timings():
+async def test_ticket_creation_records_pipeline_stage_timings(demo_tickets):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         customer = await login(client, "customer@demo.com")
         agent = await login(client, "agent@demo.com")
@@ -28,6 +28,7 @@ async def test_ticket_creation_records_pipeline_stage_timings():
             json={"subject": "Pipeline metrics VPN check", "description": "Cannot reach the VPN concentrator from home."},
         )
         assert created.status_code == 201, created.text
+        demo_tickets.append(created.json()["id"])
 
         analytics = await client.get("/api/analytics", headers=auth(agent))
         assert analytics.status_code == 200, analytics.text

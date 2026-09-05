@@ -47,12 +47,13 @@ async def test_compute_sla_due_at_uses_documented_default_without_a_configured_p
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_ticket_creation_populates_sla_due_at_from_the_seeded_demo_policy():
+async def test_ticket_creation_populates_sla_due_at_from_the_seeded_demo_policy(demo_tickets):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login = await client.post("/api/auth/login", data={"username": "customer@demo.com", "password": "Demo@123"})
         headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
         created = await client.post("/api/tickets", headers=headers, json={"subject": "SLA due-date check", "description": "Confirming ticket creation now sets a real sla_due_at."})
         assert created.status_code == 201, created.text
+        demo_tickets.append(created.json()["id"])
         assert created.json()["sla_due_at"] is not None
         due_at = datetime.fromisoformat(created.json()["sla_due_at"].replace("Z", "+00:00"))
         assert due_at > datetime.now(timezone.utc)

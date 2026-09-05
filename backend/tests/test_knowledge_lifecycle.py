@@ -86,7 +86,7 @@ async def test_rejecting_an_article_records_a_reason_and_never_publishes():
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_human_resolution_without_any_citation_drafts_a_knowledge_gap_article():
+async def test_human_resolution_without_any_citation_drafts_a_knowledge_gap_article(demo_tickets):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         customer = await token(client, "customer@demo.com")
         engineer = await token(client, "agent@demo.com")
@@ -99,6 +99,7 @@ async def test_human_resolution_without_any_citation_drafts_a_knowledge_gap_arti
             "subject": f"Knowledge gap check {unique}", "description": "The corporate VPN rejects a valid password from a new laptop.",
         })
         ticket_id = created.json()["id"]
+        demo_tickets.append(ticket_id)
         await client.post(f"/api/tickets/{ticket_id}/assign", headers=auth(team_lead), json={"engineer_id": engineer_profile.json()["id"], "comment": "Assigning for knowledge-gap test"})
         await client.post(f"/api/tickets/{ticket_id}/start-work", headers=auth(engineer), json={"comment": "Investigating"})
         draft = await client.post(f"/api/tickets/{ticket_id}/drafts", headers=auth(engineer), json={"content": "Re-issued a new hardware token for the laptop and confirmed VPN access.", "citations": []})

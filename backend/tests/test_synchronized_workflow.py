@@ -18,7 +18,7 @@ def auth(token: str) -> dict[str, str]:
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_ticket_is_synchronized_across_customer_engineer_and_reviewer():
+async def test_ticket_is_synchronized_across_customer_engineer_and_reviewer(demo_tickets):
     """One shared ticket progresses atomically and exposes only approved content."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -40,6 +40,7 @@ async def test_ticket_is_synchronized_across_customer_engineer_and_reviewer():
         )
         assert created.status_code == 201, created.text
         ticket_id = created.json()["id"]
+        demo_tickets.append(ticket_id)
         assert created.json()["status"] in {"routed", "assigned"}
         assert created.json()["ai_draft_reply"] is None
         assert created.json()["final_response"] is None
