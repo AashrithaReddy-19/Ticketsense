@@ -284,3 +284,27 @@ async def test_high_risk_action_requires_a_different_approver_before_executing()
             assert approved.json()["result"]["data"]["password_changed"] is False
     finally:
         await teardown_tenant(tenant["tenant_id"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_execution_history_list_endpoint_is_not_shadowed_by_the_action_key_route():
+    """Regression test: GET /api/safe-actions/executions and GET /api/safe-actions/{action_key}
+    are both single-segment GET routes under the same prefix. Registering the
+    catch-all {action_key} route first previously shadowed /executions entirely
+    (FastAPI/Starlette matches in registration order) -- a live browser check
+    caught this as a raw 404 from the Admin Safe Actions page; no mocked
+    frontend test or backend test had ever called the real router for this
+    exact path before."""
+    tenant = await make_tenant()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            admin_token = create_access_token(tenant["admin_id"], "system_admin", None, tenant["tenant_id"])
+            executed = await client.post("/api/safe-actions/check_service_status/execute", headers={**auth(admin_token), "Idempotency-Key": uuid4().hex},
+                                          json={"parameters": {"service_name": "jira"}, "confirm": True})
+            assert executed.status_code == 201, executed.text
+
+            history = await client.get("/api/safe-actions/executions", headers=auth(admin_token))
+            assert history.status_code == 200, history.text
+            assert any(row["id"] == executed.json()["id"] for row in history.json())
+    finally:
+        await teardown_tenant(tenant["tenant_id"])

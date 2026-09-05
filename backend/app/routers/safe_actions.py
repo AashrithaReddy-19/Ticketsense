@@ -60,6 +60,26 @@ async def list_actions(user: User = Depends(get_current_user), db: AsyncSession 
     return [definition_json(d) for d in visible]
 
 
+@router.get("/executions")
+async def list_executions(ticket_id: UUID | None = None, action_key: str = "", user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # Must be registered before GET /{action_key} below — both are single-segment
+    # GET routes, and FastAPI/Starlette matches in registration order, so this
+    # would otherwise be shadowed by the catch-all and 404 as "Unknown safe
+    # action: executions". (Caught by live browser inspection, not by the
+    # mocked frontend tests or the backend tests, which never exercised this
+    # exact list endpoint through the real router.)
+    if not await user_has_permission(db, user, "safe_action:execute"):
+        raise HTTPException(403, "Permission required: safe_action:execute")
+    query = select(SafeActionExecution).where(SafeActionExecution.tenant_id == user.tenant_id)
+    if ticket_id:
+        query = query.where(SafeActionExecution.ticket_id == ticket_id)
+    if action_key:
+        query = query.where(SafeActionExecution.action_key == action_key)
+    rows = (await db.scalars(query.order_by(SafeActionExecution.created_at.desc()).limit(100))).all()
+    results = {r.execution_id: r for r in (await db.scalars(select(SafeActionResult).where(SafeActionResult.execution_id.in_([row.id for row in rows])))).all()}
+    return [execution_json(row, results.get(row.id)) for row in rows]
+
+
 @router.get("/{action_key}")
 async def get_action(action_key: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     definition = await get_definition(db, action_key)
@@ -221,20 +241,6 @@ async def reject_execution(execution_id: UUID, reason: str = "", user: User = De
     await db.commit()
     await db.refresh(execution)
     return execution_json(execution)
-
-
-@router.get("/executions")
-async def list_executions(ticket_id: UUID | None = None, action_key: str = "", user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if not await user_has_permission(db, user, "safe_action:execute"):
-        raise HTTPException(403, "Permission required: safe_action:execute")
-    query = select(SafeActionExecution).where(SafeActionExecution.tenant_id == user.tenant_id)
-    if ticket_id:
-        query = query.where(SafeActionExecution.ticket_id == ticket_id)
-    if action_key:
-        query = query.where(SafeActionExecution.action_key == action_key)
-    rows = (await db.scalars(query.order_by(SafeActionExecution.created_at.desc()).limit(100))).all()
-    results = {r.execution_id: r for r in (await db.scalars(select(SafeActionResult).where(SafeActionResult.execution_id.in_([row.id for row in rows])))).all()}
-    return [execution_json(row, results.get(row.id)) for row in rows]
 
 
 @router.get("/executions/{execution_id}")
