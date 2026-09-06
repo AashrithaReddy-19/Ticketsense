@@ -53,6 +53,11 @@ export interface EvaluationRun {id:string;dataset_version_id:string;target:"depa
 export interface EvaluationRunDetail extends EvaluationRun {overall_metrics:Record<string,number>;per_class_metrics:Record<string,{support:number;precision?:number;recall?:number;f1?:number}>;confusion_matrix:{labels:string[];matrix:number[][]}|null}
 export interface EvaluationExample {id:string;dataset_row_id:string;true_label:string;predicted_label:string;correct:boolean;top_3_hit:boolean|null;predicted_confidence:number|null;redacted_text:string}
 export interface KnowledgeConflictView { id:string; article_a_id:string; article_b_id:string|null; conflict_type:string; severity:string; evidence_excerpt_a:string; evidence_excerpt_b:string|null; confidence:number|null; sample_size:number|null; affected_ticket_ids:string[]; review_state:string; resolved_by:string|null; resolved_at:string|null; resolution_note:string|null; created_at:string }
+export interface OcrEngineStatus { available:boolean; reason:string|null }
+export interface OcrBenchmarkDatasetView { id:string; key:string; name:string; description:string; case_count:number; created_at:string }
+export interface OcrBenchmarkCaseView { id:string; dataset_id:string; image_sha256:string; ground_truth_text:string; source_label:string; tags:string[]; created_at:string }
+export interface OcrBenchmarkResultView { id:string; case_id:string; extracted_text:string; character_error_rate:number; word_error_rate:number; latency_ms:number }
+export interface OcrBenchmarkRunView { id:string; dataset_id:string; engine:string; status:string; unavailable_reason:string|null; row_count_considered:number; mean_character_error_rate:number|null; mean_word_error_rate:number|null; mean_latency_ms:number|null; environment_info:Record<string,unknown>; started_at:string; completed_at:string|null; created_at:string; results?:OcrBenchmarkResultView[] }
 export interface RedTeamResultView { case_key:string; category:string; severity:string; title:string; expected_result:string; observed_result:string; passed:boolean; applicable:boolean; gate_responsible:string|null; detail:string }
 export interface RedTeamRunSummary { run_id:string; suite_version:number; status:string; started_at:string; completed_at:string|null; total_cases:number; applicable_cases:number; not_applicable_cases:number; attack_success_rate:number|null; block_rate:number|null; by_category:Record<string,{total:number;failed:number}>; by_severity:Record<string,{total:number;failed:number}>; results:RedTeamResultView[] }
 export interface RedTeamRunListItem { id:string; suite_version:number; status:string; started_at:string; completed_at:string|null }
@@ -155,6 +160,14 @@ export const api = {
   knowledgeConflicts: (reviewState?:string) => request<{items:KnowledgeConflictView[];page:number;page_size:number;total:number}>(`/api/v2/knowledge-conflicts${reviewState?`?review_state=${reviewState}`:""}`),
   scanKnowledgeConflicts: () => request<{new_conflicts:number;conflicts:KnowledgeConflictView[]}>("/api/v2/knowledge-conflicts/scan",{method:"POST"}),
   reviewKnowledgeConflict: (id:string,payload:{review_state:string;resolution_note:string}) => request<KnowledgeConflictView>(`/api/v2/knowledge-conflicts/${id}`,{method:"PATCH",body:JSON.stringify(payload)}),
+  ocrEngines: () => request<{engines:Record<string,OcrEngineStatus>}>("/api/v2/ocr-benchmark/engines"),
+  ocrDatasets: () => request<{items:OcrBenchmarkDatasetView[]}>("/api/v2/ocr-benchmark/datasets"),
+  createOcrDataset: (payload:{key:string;name:string;description?:string}) => request<OcrBenchmarkDatasetView>("/api/v2/ocr-benchmark/datasets",{method:"POST",body:JSON.stringify(payload)}),
+  ocrCases: (datasetId:string) => request<{items:OcrBenchmarkCaseView[]}>(`/api/v2/ocr-benchmark/datasets/${datasetId}/cases`),
+  createOcrCase: (datasetId:string,payload:{image_base64:string;ground_truth_text:string;tags?:string[]}) => request<OcrBenchmarkCaseView>(`/api/v2/ocr-benchmark/datasets/${datasetId}/cases`,{method:"POST",body:JSON.stringify(payload)}),
+  ocrRuns: (datasetId?:string) => request<{items:OcrBenchmarkRunView[];page:number;page_size:number;total:number}>(`/api/v2/ocr-benchmark/runs${datasetId?`?dataset_id=${datasetId}`:""}`),
+  createOcrRun: (payload:{dataset_id:string;engine:string}) => request<OcrBenchmarkRunView>("/api/v2/ocr-benchmark/runs",{method:"POST",body:JSON.stringify(payload)}),
+  ocrRunDetail: (id:string) => request<OcrBenchmarkRunView>(`/api/v2/ocr-benchmark/runs/${id}`),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),
   uploadAttachment: (id:string,file:File) => {const body=new FormData();body.append("file",file);return request<AttachmentMeta>(`/api/tickets/${id}/attachment`,{method:"POST",body})},
   attachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment`),

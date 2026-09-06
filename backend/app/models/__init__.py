@@ -34,6 +34,7 @@ from app.models.graph import GraphEdge, GraphNode
 from app.models.experiment import ShadowRun
 from app.models.red_team import RedTeamCase, RedTeamResult, RedTeamRun, RedTeamSuite
 from app.models.knowledge_conflict import KnowledgeConflict
+from app.models.ocr_benchmark import OcrBenchmarkCase, OcrBenchmarkDataset, OcrBenchmarkResult, OcrBenchmarkRun
 
 __all__ = [
     "Base",
@@ -68,4 +69,5 @@ __all__ = [
     "ShadowRun",
     "RedTeamSuite", "RedTeamCase", "RedTeamRun", "RedTeamResult",
     "KnowledgeConflict",
+    "OcrBenchmarkDataset", "OcrBenchmarkCase", "OcrBenchmarkRun", "OcrBenchmarkResult",
 ]

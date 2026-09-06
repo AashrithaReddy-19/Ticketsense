@@ -23,6 +23,7 @@ import AdminV2Governance from "./pages/AdminV2Governance";
 import AdminEvaluationLab from "./pages/AdminEvaluationLab";
 import AdminRedTeamLab from "./pages/AdminRedTeamLab";
 import AdminKnowledgeConflicts from "./pages/AdminKnowledgeConflicts";
+import AdminOcrBenchmarkLab from "./pages/AdminOcrBenchmarkLab";
 import { Loading } from "./components/States";
 import { ToastProvider } from "./components/ui/Toast";
 import "./tokens.css";
@@ -88,6 +89,7 @@ export function Protected() {
     <Route path="/admin/evaluation-lab" element={<CapabilityRoute anyOf={["evaluation:read", "dataset:read"]}><AdminEvaluationLab /></CapabilityRoute>} />
     <Route path="/admin/red-team-lab" element={<CapabilityRoute anyOf={["red_team:read"]}><AdminRedTeamLab /></CapabilityRoute>} />
     <Route path="/admin/knowledge-conflicts" element={<CapabilityRoute anyOf={["knowledge_conflict:read"]}><AdminKnowledgeConflicts /></CapabilityRoute>} />
+    <Route path="/admin/ocr-benchmark-lab" element={<CapabilityRoute anyOf={["ocr_benchmark:read"]}><AdminOcrBenchmarkLab /></CapabilityRoute>} />
     <Route path="/analytics" element={<CapabilityRoute anyOf={["analytics:department", "analytics:all", "ticket:internal_ai"]}><AnalyticsDashboard /></CapabilityRoute>} />
     <Route path="/tickets" element={<Tickets />} />
     <Route path="/queue" element={<Tickets />} />

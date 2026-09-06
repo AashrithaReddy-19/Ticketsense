@@ -15,6 +15,7 @@ const modules = [
   { capability: "evaluation:read", to: "/admin/evaluation-lab", title: "Evaluation lab", detail: "Leakage-safe dataset registry and reproducible classification evaluation runs — real metrics, never sample data.", icon: IconChart },
   { capability: "red_team:read", to: "/admin/red-team-lab", title: "Red-team lab", detail: "Adversarial safety cases against real defenses — synthetic payloads only, never sent to a customer.", icon: IconShield },
   { capability: "knowledge_conflict:read", to: "/admin/knowledge-conflicts", title: "Knowledge conflicts", detail: "Contradictory articles, low success rate and high edit/reopen rate — real signals, human review required.", icon: IconKnowledge },
+  { capability: "ocr_benchmark:read", to: "/admin/ocr-benchmark-lab", title: "OCR benchmark lab", detail: "Pluggable OCR engines against curated ground truth — real CER/WER, honest \"not configured\" states.", icon: IconLayers },
   { capability: "analytics:all", to: "/analytics", title: "Analytics", detail: "Live operational, confidence, workflow and workload metrics.", icon: IconChart },
   { capability: "audit:read", to: "/audit", title: "Audit & compliance", detail: "Search immutable security and workflow events.", icon: IconShield },
   { capability: "integration:manage", to: "/integrations", title: "Settings & integrations", detail: "Inspect connector status without exposing stored configuration.", icon: IconPlug },
