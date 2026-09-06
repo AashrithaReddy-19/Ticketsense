@@ -54,6 +54,7 @@ export interface EvaluationRunDetail extends EvaluationRun {overall_metrics:Reco
 export interface EvaluationExample {id:string;dataset_row_id:string;true_label:string;predicted_label:string;correct:boolean;top_3_hit:boolean|null;predicted_confidence:number|null;redacted_text:string}
 export interface KnowledgeConflictView { id:string; article_a_id:string; article_b_id:string|null; conflict_type:string; severity:string; evidence_excerpt_a:string; evidence_excerpt_b:string|null; confidence:number|null; sample_size:number|null; affected_ticket_ids:string[]; review_state:string; resolved_by:string|null; resolved_at:string|null; resolution_note:string|null; created_at:string }
 export interface OcrEngineStatus { available:boolean; reason:string|null }
+export interface ConnectorView { id:string; provider:string; name:string; enabled:boolean; config_reference:string|null; status:string; last_verified_at:string|null; last_verified_by:string|null; last_error:string|null }
 export interface OcrBenchmarkDatasetView { id:string; key:string; name:string; description:string; case_count:number; created_at:string }
 export interface OcrBenchmarkCaseView { id:string; dataset_id:string; image_sha256:string; ground_truth_text:string; source_label:string; tags:string[]; created_at:string }
 export interface OcrBenchmarkResultView { id:string; case_id:string; extracted_text:string; character_error_rate:number; word_error_rate:number; latency_ms:number }
@@ -168,6 +169,9 @@ export const api = {
   ocrRuns: (datasetId?:string) => request<{items:OcrBenchmarkRunView[];page:number;page_size:number;total:number}>(`/api/v2/ocr-benchmark/runs${datasetId?`?dataset_id=${datasetId}`:""}`),
   createOcrRun: (payload:{dataset_id:string;engine:string}) => request<OcrBenchmarkRunView>("/api/v2/ocr-benchmark/runs",{method:"POST",body:JSON.stringify(payload)}),
   ocrRunDetail: (id:string) => request<OcrBenchmarkRunView>(`/api/v2/ocr-benchmark/runs/${id}`),
+  connectors: () => request<{items:ConnectorView[]}>("/api/v2/connectors"),
+  configureConnector: (id:string,config_reference:string) => request<ConnectorView>(`/api/v2/connectors/${id}/configure`,{method:"POST",body:JSON.stringify({config_reference})}),
+  verifyConnector: (id:string) => request<ConnectorView>(`/api/v2/connectors/${id}/verify`,{method:"POST"}),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),
   uploadAttachment: (id:string,file:File) => {const body=new FormData();body.append("file",file);return request<AttachmentMeta>(`/api/tickets/${id}/attachment`,{method:"POST",body})},
   attachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment`),

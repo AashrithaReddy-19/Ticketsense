@@ -87,6 +87,11 @@ class Integration(Base, UUIDPKMixin, CreatedAtMixin, UpdatedAtMixin):
     name: Mapped[str] = mapped_column(String(120))
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    config_reference: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_configured")
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_verified_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    last_error: Mapped[str | None] = mapped_column(Text)
 
 
 class AIDecision(Base, UUIDPKMixin, CreatedAtMixin):
