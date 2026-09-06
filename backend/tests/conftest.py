@@ -74,6 +74,21 @@ async def demo_knowledge_articles():
 
 
 @pytest_asyncio.fixture
+async def demo_datasets():
+    """Same idea as ``demo_tickets``, for a test that registers a real Dataset
+    (and its versions/import batches/rows) against the shared demo tenant.
+    Deleting the dataset cascades through dataset_versions, dataset_import_
+    batches and dataset_rows."""
+    created: list[str] = []
+    yield created
+    if created:
+        ids = [str(i) for i in created]
+        async with async_session_maker() as db:
+            await db.execute(text("DELETE FROM datasets WHERE id = ANY(:ids)"), {"ids": ids})
+            await db.commit()
+
+
+@pytest_asyncio.fixture
 async def demo_tickets():
     created: list[str] = []
     yield created

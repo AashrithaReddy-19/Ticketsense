@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.config import settings
 from app.database import async_session_maker
-from app.routers import analytics, attachments, auth, enterprise, health, platform, playbooks, prevention, queues, release_b, safe_actions, tickets, v2_governance, workflow
+from app.routers import analytics, attachments, auth, datasets, enterprise, health, platform, playbooks, prevention, queues, release_b, safe_actions, tickets, v2_governance, workflow
 
 async def cleanup_sessions() -> None:
     while True:
@@ -69,3 +69,4 @@ app.include_router(playbooks.router)
 app.include_router(safe_actions.router)
 app.include_router(prevention.router)
 app.include_router(v2_governance.router)
+app.include_router(datasets.router)

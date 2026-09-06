@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     attachment_storage_root: str = "uploads/attachments"
     attachment_extraction_timeout_seconds: int = 30
 
+    dataset_import_max_bytes: int = 25 * 1024 * 1024
+    dataset_import_max_rows: int = 20_000
+
     jwt_secret_key: str = "dev-only-insecure-secret-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60

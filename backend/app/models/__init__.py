@@ -26,6 +26,7 @@ from app.models.v2_governance import (
     FeatureFlagAudit, FeatureFlagOverride, ModelDeployment, PromptVersion,
     ProviderModel, UserCapabilityBundle,
 )
+from app.models.dataset import Dataset, DatasetImportBatch, DatasetRow, DatasetVersion
 
 __all__ = [
     "Base",
@@ -51,4 +52,5 @@ __all__ = [
     "FeatureFlag", "FeatureFlagOverride", "FeatureFlagAudit", "ProviderModel",
     "ModelDeployment", "PromptVersion", "AIUsageEvent", "CapabilityBundle",
     "CapabilityBundlePermission", "UserCapabilityBundle",
+    "Dataset", "DatasetVersion", "DatasetImportBatch", "DatasetRow",
 ]
