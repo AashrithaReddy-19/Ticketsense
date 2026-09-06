@@ -34,6 +34,7 @@ ALL_OTHER_PASSED_GATES = [
     "approved_current_evidence", "retrieval_relevance", "citation_validation",
     "claim_grounding", "no_contradiction", "pii_secrets", "attachment_quality",
     "pipeline_complete", "immutable_response_available", "playbook_compatible", "no_immediate_repeat",
+    "no_unresolved_knowledge_conflict",
 ]
 
 

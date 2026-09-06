@@ -16,6 +16,7 @@ from app.models.platform import Notification
 from app.models.response_draft import ResponseDraft
 from app.models.ticket import Ticket
 from app.models.ticket_attachment import TicketAttachment
+from app.services.knowledge_conflicts.detector import blocking_article_ids
 from app.services.passport import create_passport
 from app.services.playbooks import match_playbook, normalize_category, playbook_gate, record_recommendation
 from app.services.workflow import PUBLIC_MESSAGES, auto_assign_ticket, next_version, record_event, transition
@@ -69,6 +70,8 @@ async def evaluate_resolution_gates(db: AsyncSession, ticket: Ticket, draft: AID
                          and item.get("status") == "approved" and item.get("is_publishable") is True
                          and item.get("article_version") == draft.article_version and str(item.get("chunk_text", "")).strip()]
     retrieval = max((float(item.get("similarity", 0)) for item in approved_evidence), default=0.0)
+    cited_article_ids = [item.get("article_id") for item in approved_evidence if item.get("article_id")]
+    conflicted_article_ids = await blocking_article_ids(db, ticket.tenant_id, cited_article_ids)
     attachment = await db.scalar(select(TicketAttachment).where(TicketAttachment.ticket_id == ticket.id, TicketAttachment.tenant_id == ticket.tenant_id))
     ocr_ok = not attachment or attachment.extraction_status == "ready" and (not attachment.ocr_confidence_available or float(attachment.ocr_confidence or 0) >= .6)
     execution = await db.scalar(select(PipelineExecution).where(PipelineExecution.ticket_id == ticket.id, PipelineExecution.tenant_id == ticket.tenant_id).order_by(PipelineExecution.created_at.desc()).limit(1))
@@ -105,6 +108,7 @@ async def evaluate_resolution_gates(db: AsyncSession, ticket: Ticket, draft: AID
         Gate("immutable_response_available", bool(draft.draft_text and draft.citations), detail="A cited draft must exist before publication"),
         Gate("playbook_compatible", playbook_passed, detail=playbook_detail),
         Gate("no_immediate_repeat", not bool(fingerprint and fingerprint == ticket.last_auto_resolution_fingerprint), detail="A rejected answer cannot immediately auto-publish again"),
+        Gate("no_unresolved_knowledge_conflict", not bool(conflicted_article_ids), detail="An open, high-severity knowledge conflict blocks cited evidence until an Admin reviews it" if conflicted_article_ids else "No unresolved high-severity conflict affects the cited evidence"),
     ]
     return policy, category, gates, fingerprint
 

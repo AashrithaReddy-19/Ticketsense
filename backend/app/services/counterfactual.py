@@ -45,6 +45,7 @@ GATE_LABELS = {
     "pipeline_complete": "The AI processing pipeline must have completed without a fallback",
     "immutable_response_available": "A cited draft response must exist before publication",
     "playbook_compatible": "The response must match an approved playbook when one applies",
+    "no_unresolved_knowledge_conflict": "The cited evidence must not have an open, unresolved high-severity conflict",
 }
 
 

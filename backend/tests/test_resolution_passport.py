@@ -62,7 +62,7 @@ async def test_auto_resolution_creates_immutable_passport_with_real_gate_snapsho
         assert float(passport.overall_confidence) == decision.overall_confidence
         assert passport.passed_gates == decision.passed_gates
         assert passport.failed_gates == []
-        assert len(passport.confidence_components) == 19
+        assert len(passport.confidence_components) == 20
         assert passport.citations == [{"citation_id": "KB-001"}]
         assert passport.integrity_hash == recompute_integrity_hash(passport)
         assert passport.created_by == admin_id

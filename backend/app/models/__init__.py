@@ -33,6 +33,7 @@ from app.models.counterfactual import CounterfactualExplanation
 from app.models.graph import GraphEdge, GraphNode
 from app.models.experiment import ShadowRun
 from app.models.red_team import RedTeamCase, RedTeamResult, RedTeamRun, RedTeamSuite
+from app.models.knowledge_conflict import KnowledgeConflict
 
 __all__ = [
     "Base",
@@ -66,4 +67,5 @@ __all__ = [
     "GraphNode", "GraphEdge",
     "ShadowRun",
     "RedTeamSuite", "RedTeamCase", "RedTeamRun", "RedTeamResult",
+    "KnowledgeConflict",
 ]
