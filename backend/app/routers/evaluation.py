@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user, user_has_permission
-from app.models.dataset import Dataset, DatasetVersion
+from app.models.dataset import Dataset, DatasetRow, DatasetVersion
 from app.models.evaluation import EvaluationArtifact, EvaluationExample, EvaluationMetric, EvaluationRun
 from app.models.platform import AuditLog
 from app.models.user import User
@@ -111,16 +111,17 @@ async def run_examples(run_id: UUID, correct: bool | None = Query(None), page: i
     await require(db, user, "evaluation:read")
     await require_lab_enabled(db, user)
     await _get_owned_run(db, user, run_id)
-    query = select(EvaluationExample).where(EvaluationExample.run_id == run_id)
+    query = select(EvaluationExample, DatasetRow.redacted_text).join(DatasetRow, DatasetRow.id == EvaluationExample.dataset_row_id).where(EvaluationExample.run_id == run_id)
     if correct is not None:
         query = query.where(EvaluationExample.correct.is_(correct))
     total = int(await db.scalar(select(func.count()).select_from(query.subquery())) or 0)
-    rows = (await db.scalars(query.order_by(EvaluationExample.id).offset((page - 1) * page_size).limit(page_size))).all()
+    pairs = (await db.execute(query.order_by(EvaluationExample.id).offset((page - 1) * page_size).limit(page_size))).all()
     return {"items": [{
         "id": row.id, "dataset_row_id": row.dataset_row_id, "true_label": row.true_label,
         "predicted_label": row.predicted_label, "correct": row.correct, "top_3_hit": row.top_3_hit,
         "predicted_confidence": float(row.predicted_confidence) if row.predicted_confidence is not None else None,
-    } for row in rows], "page": page, "page_size": page_size, "total": total}
+        "redacted_text": redacted_text,
+    } for row, redacted_text in pairs], "page": page, "page_size": page_size, "total": total}
 
 
 @router.get("/runs/{run_id}/export")

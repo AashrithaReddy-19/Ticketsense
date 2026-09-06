@@ -20,6 +20,7 @@ import AdminPrevention from "./pages/AdminPrevention";
 import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import AdminPortal from "./pages/AdminPortal";
 import AdminV2Governance from "./pages/AdminV2Governance";
+import AdminEvaluationLab from "./pages/AdminEvaluationLab";
 import { Loading } from "./components/States";
 import { ToastProvider } from "./components/ui/Toast";
 import "./tokens.css";
@@ -82,6 +83,7 @@ export function Protected() {
     <Route path="/admin/safe-actions" element={<CapabilityRoute anyOf={["safe_action:execute"]}><AdminSafeActions /></CapabilityRoute>} />
     <Route path="/admin/prevention" element={<CapabilityRoute anyOf={["prevention:manage"]}><AdminPrevention /></CapabilityRoute>} />
     <Route path="/admin/ai-governance" element={<CapabilityRoute anyOf={["feature:read", "model:read", "observability:read"]}><AdminV2Governance /></CapabilityRoute>} />
+    <Route path="/admin/evaluation-lab" element={<CapabilityRoute anyOf={["evaluation:read", "dataset:read"]}><AdminEvaluationLab /></CapabilityRoute>} />
     <Route path="/analytics" element={<CapabilityRoute anyOf={["analytics:department", "analytics:all", "ticket:internal_ai"]}><AnalyticsDashboard /></CapabilityRoute>} />
     <Route path="/tickets" element={<Tickets />} />
     <Route path="/queue" element={<Tickets />} />

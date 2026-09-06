@@ -163,6 +163,7 @@ async def test_evaluation_run_computes_real_metrics_against_trained_classifier(d
             examples = await client.get(f"/api/v2/evaluation/runs/{run['id']}/examples", headers=headers)
             assert examples.status_code == 200
             assert examples.json()["total"] == run["row_count_considered"]
+            assert all(item["redacted_text"] for item in examples.json()["items"])
 
             wrong_only = await client.get(f"/api/v2/evaluation/runs/{run['id']}/examples", headers=headers, params={"correct": "false"})
             assert wrong_only.status_code == 200
