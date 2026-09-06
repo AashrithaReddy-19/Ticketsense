@@ -13,6 +13,7 @@ const modules = [
   { capability: "prevention:manage", to: "/admin/prevention", title: "Predictive prevention", detail: "Evidence-backed recommendations from real tenant trends — never a confirmed cause.", icon: IconChart },
   { capability: "feature:read", to: "/admin/ai-governance", title: "V2 AI governance", detail: "Feature rollout, emergency kill switches, immutable model versions and measured provider usage.", icon: IconShield },
   { capability: "evaluation:read", to: "/admin/evaluation-lab", title: "Evaluation lab", detail: "Leakage-safe dataset registry and reproducible classification evaluation runs — real metrics, never sample data.", icon: IconChart },
+  { capability: "red_team:read", to: "/admin/red-team-lab", title: "Red-team lab", detail: "Adversarial safety cases against real defenses — synthetic payloads only, never sent to a customer.", icon: IconShield },
   { capability: "analytics:all", to: "/analytics", title: "Analytics", detail: "Live operational, confidence, workflow and workload metrics.", icon: IconChart },
   { capability: "audit:read", to: "/audit", title: "Audit & compliance", detail: "Search immutable security and workflow events.", icon: IconShield },
   { capability: "integration:manage", to: "/integrations", title: "Settings & integrations", detail: "Inspect connector status without exposing stored configuration.", icon: IconPlug },

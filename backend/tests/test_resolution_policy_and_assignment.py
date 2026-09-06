@@ -106,7 +106,8 @@ async def teardown_tenant(tenant_id: UUID) -> None:
         # ON DELETE CASCADE, so they must be cleared before departments/users below.
         await db.execute(text("UPDATE tickets SET parent_incident_id=NULL WHERE tenant_id=:t"), {"t": t})
         for table in ("knowledge_base", "incidents", "graph_edges", "graph_nodes", "resolution_passports",
-                      "counterfactual_explanations", "shadow_runs", "model_deployments", "provider_models"):
+                      "counterfactual_explanations", "shadow_runs", "model_deployments", "provider_models",
+                      "red_team_runs"):
             await db.execute(text(f"DELETE FROM {table} WHERE tenant_id=:t"), {"t": t})
         for table in ("ticket_decisions", "assignment_decisions", "diagnostic_plans", "ticket_messages",
                       "resolution_confirmations", "department_resolution_policies", "pipeline_executions",

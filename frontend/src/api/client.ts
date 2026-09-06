@@ -52,6 +52,9 @@ export interface DatasetVersion {id:string;dataset_id:string;version_number:numb
 export interface EvaluationRun {id:string;dataset_version_id:string;target:"department"|"priority"|"sentiment";model_artifact_path:string;model_artifact_hash:string|null;git_commit:string|null;environment_info:Record<string,unknown>;config_snapshot:Record<string,unknown>;split_used:string;status:"completed"|"failed"|"insufficient_data";row_count_considered:number;row_count_excluded:number;exclusion_reasons:Record<string,unknown>;started_at:string;completed_at:string|null;notes:string|null;created_at:string}
 export interface EvaluationRunDetail extends EvaluationRun {overall_metrics:Record<string,number>;per_class_metrics:Record<string,{support:number;precision?:number;recall?:number;f1?:number}>;confusion_matrix:{labels:string[];matrix:number[][]}|null}
 export interface EvaluationExample {id:string;dataset_row_id:string;true_label:string;predicted_label:string;correct:boolean;top_3_hit:boolean|null;predicted_confidence:number|null;redacted_text:string}
+export interface RedTeamResultView { case_key:string; category:string; severity:string; title:string; expected_result:string; observed_result:string; passed:boolean; applicable:boolean; gate_responsible:string|null; detail:string }
+export interface RedTeamRunSummary { run_id:string; suite_version:number; status:string; started_at:string; completed_at:string|null; total_cases:number; applicable_cases:number; not_applicable_cases:number; attack_success_rate:number|null; block_rate:number|null; by_category:Record<string,{total:number;failed:number}>; by_severity:Record<string,{total:number;failed:number}>; results:RedTeamResultView[] }
+export interface RedTeamRunListItem { id:string; suite_version:number; status:string; started_at:string; completed_at:string|null }
 export interface ShadowSampleResult { status:string; sample_size:number; missing:string[]; reason:string|null }
 export interface ChampionChallengerComparison { sample_size:number; data_sufficient:boolean; reason:string|null; agreement_rate:number|null; champion_accuracy:number|null; challenger_accuracy:number|null; challenger_accuracy_ci:[number,number]|null; avg_champion_latency_ms:number|null; avg_challenger_latency_ms:number|null }
 export interface ChampionHealthResult { action:string; reason:string; accuracy?:number; sample_size?:number }
@@ -145,6 +148,9 @@ export const api = {
   runShadowSample: (task_type:string,sample_size=20) => request<ShadowSampleResult>("/api/v2/experiments/shadow-runs",{method:"POST",body:JSON.stringify({task_type,sample_size})}),
   compareChampionChallenger: (task_type:string) => request<ChampionChallengerComparison>(`/api/v2/experiments/compare?task_type=${task_type}`),
   championHealthCheck: (task_type:string) => request<ChampionHealthResult>("/api/v2/experiments/champion-health-check",{method:"POST",body:JSON.stringify({task_type})}),
+  runRedTeamSuite: () => request<RedTeamRunSummary>("/api/v2/red-team/runs",{method:"POST"}),
+  redTeamRuns: () => request<{items:RedTeamRunListItem[];page:number;page_size:number;total:number}>("/api/v2/red-team/runs"),
+  redTeamRunDetail: (id:string) => request<RedTeamRunSummary>(`/api/v2/red-team/runs/${id}`),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),
   uploadAttachment: (id:string,file:File) => {const body=new FormData();body.append("file",file);return request<AttachmentMeta>(`/api/tickets/${id}/attachment`,{method:"POST",body})},
   attachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment`),
