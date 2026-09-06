@@ -16,6 +16,7 @@ from app.models.platform import Notification
 from app.models.response_draft import ResponseDraft
 from app.models.ticket import Ticket
 from app.models.ticket_attachment import TicketAttachment
+from app.services.passport import create_passport
 from app.services.playbooks import match_playbook, normalize_category, playbook_gate, record_recommendation
 from app.services.workflow import PUBLIC_MESSAGES, auto_assign_ticket, next_version, record_event, transition
 
@@ -108,7 +109,7 @@ async def evaluate_resolution_gates(db: AsyncSession, ticket: Ticket, draft: AID
     return policy, category, gates, fingerprint
 
 
-async def process_resolution_decision(db: AsyncSession, ticket: Ticket) -> TicketDecision:
+async def process_resolution_decision(db: AsyncSession, ticket: Ticket, triggered_by: UUID | None = None) -> TicketDecision:
     draft = await db.scalar(select(AIDraft).where(AIDraft.ticket_id == ticket.id, AIDraft.tenant_id == ticket.tenant_id))
     if not draft:
         raise ValueError("A grounded draft is required before policy evaluation")
@@ -156,6 +157,7 @@ async def process_resolution_decision(db: AsyncSession, ticket: Ticket) -> Ticke
         transition(db, ticket, None, "resolved_by_ai", "ticket_auto_resolved", explanation, "both", version)
         db.add(Notification(tenant_id=ticket.tenant_id, user_id=ticket.submitted_by, title="AI resolution ready",
             message="A safety-checked resolution is ready. Please confirm whether it solved your issue.", kind="resolution"))
+        await create_passport(db, ticket, response, resolution_type="ai", created_by=triggered_by or ticket.submitted_by, decision=decision)
     else:
         if not ticket.assignee_id:
             if ticket.status not in {"awaiting_assignment", "routed", "reopened", "escalated", "ai_processing_failed"}:

@@ -16,6 +16,7 @@ from app.models.ai_pipeline import ClaimValidation
 from app.models.ticket import Ticket
 from app.models.ticket_history import TicketHistory
 from app.models.user import User
+from app.services.passport import create_passport
 
 
 PUBLIC_MESSAGES = {
@@ -253,23 +254,31 @@ async def approve_draft(db: AsyncSession, ticket: Ticket, reviewer: User, draft:
     ticket.final_responder_id = approved.created_by_user_id
     ticket.final_approver_id = reviewer.id
     ticket.approved_at = now
+    ticket.resolution_type = "engineer"
     text_change_ratio = None
     if modified:
         from ai.evaluation.metrics import character_error_rate
         text_change_ratio = character_error_rate(approved.content, draft.content)
-    db.add(Feedback(
+    feedback = Feedback(
         ticket_id=ticket.id,
         reviewer_id=reviewer.id,
         action="edit" if modified else "accept",
         edited_reply=approved.content if modified else None,
         reject_reason=comment,
         text_change_ratio=text_change_ratio,
-    ))
+    )
+    db.add(feedback)
+    await db.flush()
     transition(db, ticket, reviewer, "resolved", "ticket_resolved", "A reviewed resolution has been provided.", "both", approved.version_number)
     ticket.resolved_at = now
     from ai.embeddings.resolution_index import index_resolution
     await index_resolution(db, ticket)
     await flag_knowledge_gap_if_unsupported(db, ticket, approved)
+    await create_passport(
+        db, ticket, approved, resolution_type="engineer", created_by=reviewer.id,
+        engineer_edit_ratio=text_change_ratio, feedback_id=feedback.id, reviewer_id=reviewer.id,
+        author_user_id=approved.created_by_user_id,
+    )
     return approved
 
 

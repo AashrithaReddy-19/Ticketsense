@@ -134,7 +134,7 @@ async def process_ticket(ticket_id: UUID, user: User = Depends(get_current_user)
         await auto_assign_ticket(db, ticket)
         await db.commit()
         return {"ticket_id": ticket.id, "status": ticket.status, "public_status_message": ticket.public_status_message}
-    decision = await process_resolution_decision(db, ticket)
+    decision = await process_resolution_decision(db, ticket, triggered_by=user.id)
     db.add(AuditLog(tenant_id=ticket.tenant_id, user_id=user.id, action="ticket.policy_decided", resource_type="ticket", resource_id=str(ticket.id), metadata_json={"decision": decision.decision, "reason_code": decision.reason_code}))
     await db.commit()
     await db.refresh(ticket)

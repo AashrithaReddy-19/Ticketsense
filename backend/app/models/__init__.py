@@ -28,6 +28,7 @@ from app.models.v2_governance import (
 )
 from app.models.dataset import Dataset, DatasetImportBatch, DatasetRow, DatasetVersion
 from app.models.evaluation import EvaluationArtifact, EvaluationExample, EvaluationMetric, EvaluationRun, ThresholdSimulation
+from app.models.resolution_passport import ResolutionPassport
 
 __all__ = [
     "Base",
@@ -56,4 +57,5 @@ __all__ = [
     "Dataset", "DatasetVersion", "DatasetImportBatch", "DatasetRow",
     "EvaluationRun", "EvaluationExample", "EvaluationMetric", "EvaluationArtifact",
     "ThresholdSimulation",
+    "ResolutionPassport",
 ]

@@ -52,6 +52,15 @@ export interface DatasetVersion {id:string;dataset_id:string;version_number:numb
 export interface EvaluationRun {id:string;dataset_version_id:string;target:"department"|"priority"|"sentiment";model_artifact_path:string;model_artifact_hash:string|null;git_commit:string|null;environment_info:Record<string,unknown>;config_snapshot:Record<string,unknown>;split_used:string;status:"completed"|"failed"|"insufficient_data";row_count_considered:number;row_count_excluded:number;exclusion_reasons:Record<string,unknown>;started_at:string;completed_at:string|null;notes:string|null;created_at:string}
 export interface EvaluationRunDetail extends EvaluationRun {overall_metrics:Record<string,number>;per_class_metrics:Record<string,{support:number;precision?:number;recall?:number;f1?:number}>;confusion_matrix:{labels:string[];matrix:number[][]}|null}
 export interface EvaluationExample {id:string;dataset_row_id:string;true_label:string;predicted_label:string;correct:boolean;top_3_hit:boolean|null;predicted_confidence:number|null;redacted_text:string}
+export interface ResolutionPassportView {
+  ticket_id: string; resolution_type: "ai" | "engineer";
+  public_citations?: Array<{ citation_id: string | null; article_version: string | null }>;
+  confirmation_state?: string; integrity_verified?: boolean; created_at?: string;
+  citations?: Array<{ citation_id?: string | null }>;
+  passed_gates?: string[]; failed_gates?: string[];
+  overall_confidence?: number | null; applicable_threshold?: number | null;
+  engineer_edit_ratio?: number | null; integrity_hash?: string; integrity_valid?: boolean; is_backfilled?: boolean;
+}
 export interface ThresholdSimulation {id:string;department_id:string|null;category:string|null;proposed_threshold:number;sample_size:number;auto_resolved_at_threshold:number;data_sufficient:boolean;insufficiency_reasons:string[];estimated_coverage:number|null;estimated_referral_rate:number|null;historical_false_resolution_rate:number|null;confidence_interval:[number,number]|null;sensitive_category_override:boolean;based_on:string;created_at:string}
 export interface ResponseDraft {id:string;ticket_id:string;version_number:number;content:string;author_type:"ai"|"engineer"|"reviewer";created_by_user_id?:string|null;based_on_draft_id?:string|null;citations:unknown[];status:string;citation_validation_status?:string|null;validation?:{status?:string;citation?:{valid?:boolean;citation_coverage?:number;validation_errors?:string[]};grounding?:{overall_status?:string;blocked?:boolean;claims?:unknown[]}};created_at:string;updated_at:string}
 export interface DraftComparison {from_version:number;to_version:number;from_author_type:string;to_author_type:string;edit_percentage:number;added_word_count:number;removed_word_count:number;changes:Array<{operation:string;before:string;after:string}>;citations_added:unknown[];citations_removed:unknown[]}
@@ -117,6 +126,7 @@ export const api = {
   evaluationRunExamples: (id:string,onlyIncorrect=false) => request<{items:EvaluationExample[];page:number;page_size:number;total:number}>(`/api/v2/evaluation/runs/${id}/examples${onlyIncorrect?"?correct=false":""}`),
   simulateThreshold: (payload:{proposed_threshold:number;department_id?:string;category?:string}) => request<ThresholdSimulation>("/api/v2/adaptive-thresholds/simulate",{method:"POST",body:JSON.stringify(payload)}),
   thresholdSimulations: () => request<{items:ThresholdSimulation[];page:number;page_size:number;total:number}>("/api/v2/adaptive-thresholds/simulations"),
+  resolutionPassport: (ticketId:string) => request<ResolutionPassportView>(`/api/v2/passports/${ticketId}`),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),
   uploadAttachment: (id:string,file:File) => {const body=new FormData();body.append("file",file);return request<AttachmentMeta>(`/api/tickets/${id}/attachment`,{method:"POST",body})},
   attachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment`),

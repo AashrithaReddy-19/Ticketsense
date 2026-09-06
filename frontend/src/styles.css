@@ -377,6 +377,8 @@ header { height: var(--header-height); background: var(--surface-card); border-b
   align-items: center;
   gap: var(--space-2);
 }
+.resolution-passport { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--color-neutral-25); }
+.resolution-passport small { color: var(--text-muted); }
 .customer-response p {
   margin: 0;
   padding: var(--space-4);

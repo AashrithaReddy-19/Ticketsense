@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type Analysis, type AttachmentMeta, type DraftComparison, type EngineerSummary, type Evidence, type GroundedDraft, type PipelineTrace, type ResponseDraft, type TechnicalEntity, type Ticket, type TicketEvent, type TicketExplanation, type TicketMessage } from "../api/client";
+import { api, type Analysis, type AttachmentMeta, type DraftComparison, type EngineerSummary, type Evidence, type GroundedDraft, type PipelineTrace, type ResolutionPassportView, type ResponseDraft, type TechnicalEntity, type Ticket, type TicketEvent, type TicketExplanation, type TicketMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Badge, ErrorState, Loading, SyncIndicator } from "../components/States";
 import { IconAlert, IconArrowLeft, IconCheckCircle, IconPaperclip, IconRefresh } from "../components/icons";
@@ -45,6 +45,7 @@ export default function TicketWorkspace() {
   const [comparisonFrom, setComparisonFrom] = useState("");
   const [comparisonTo, setComparisonTo] = useState("");
   const [events, setEvents] = useState<TicketEvent[]>([]);
+  const [passport, setPassport] = useState<ResolutionPassportView | null>(null);
   const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [messageBody, setMessageBody] = useState("");
   const [internalNote, setInternalNote] = useState(false);
@@ -66,6 +67,7 @@ export default function TicketWorkspace() {
     try {
       const t = await api.ticket(id);
       setTicket(t);
+      setPassport(t.final_response ? await api.resolutionPassport?.(id).catch(() => null) ?? null : null);
       if (canAssign && t.department_id) {
         const available = await api.departmentEngineers(t.department_id).catch(() => []);
         setEngineers(available);
@@ -175,7 +177,9 @@ export default function TicketWorkspace() {
             </section>
             {!internal && <>
               <CustomerAttachment attachment={attachment} />
-              {ticket.final_response && <section className="customer-response"><h3>{ticket.resolution_type==="ai"?"Verified AI resolution":"Support response"}</h3><p className="preserve-lines">{ticket.final_response}</p>{ticket.final_responder_name&&<small>Provided by {ticket.final_responder_name}</small>}{ticket.resolved_at&&<small>Resolved {new Date(ticket.resolved_at).toLocaleString()}</small>}{["resolved","resolved_by_ai","resolved_by_engineer"].includes(ticket.status)&&<div className="resolution-confirm"><b>Did this solve your issue?</b><div className="form-actions"><Button size="sm" variant="primary" loading={acting} onClick={()=>confirmResolution("solved")}>Yes, close ticket</Button><Button size="sm" variant="outline" loading={acting} onClick={()=>confirmResolution("needs_help")}>I still need help</Button></div></div>}</section>}
+              {ticket.final_response && <section className="customer-response"><h3>{ticket.resolution_type==="ai"?"Verified AI resolution":"Support response"}</h3><p className="preserve-lines">{ticket.final_response}</p>{ticket.final_responder_name&&<small>Provided by {ticket.final_responder_name}</small>}{ticket.resolved_at&&<small>Resolved {new Date(ticket.resolved_at).toLocaleString()}</small>}
+                {passport && <div className="resolution-passport" aria-label="Resolution passport"><b>Resolution passport</b><Badge value={passport.integrity_verified?"integrity verified":"integrity unverified"}/>{(passport.public_citations?.length??0)>0&&<small>Cited sources: {passport.public_citations!.map(c=>c.citation_id).filter(Boolean).join(", ")}</small>}<small>Confirmation: {(passport.confirmation_state||"pending").replaceAll("_"," ")}</small></div>}
+                {["resolved","resolved_by_ai","resolved_by_engineer"].includes(ticket.status)&&<div className="resolution-confirm"><b>Did this solve your issue?</b><div className="form-actions"><Button size="sm" variant="primary" loading={acting} onClick={()=>confirmResolution("solved")}>Yes, close ticket</Button><Button size="sm" variant="outline" loading={acting} onClick={()=>confirmResolution("needs_help")}>I still need help</Button></div></div>}</section>}
               {ticket.status==="escalated"&&<div className="info-box">{ticket.public_status_message||"Your ticket has been escalated to a specialist."}</div>}
               <section className="customer-timeline">
                 <h3>Ticket progress</h3>
@@ -277,6 +281,13 @@ export default function TicketWorkspace() {
             <h2>✦ AI Intelligence</h2>
             <div className="confidence-large"><b>{Math.round((ticket.confidence_score || 0) * 100)}%</b><span>confidence</span></div>
             <p>{String(analysis.decision_reason || "Awaiting backend decision.")}</p>
+            {passport && <div className="resolution-passport" aria-label="Resolution passport">
+              <b>Resolution passport</b>
+              <Badge value={passport.integrity_valid?"integrity valid":"integrity invalid"}/>
+              {passport.is_backfilled && <Badge value="backfilled"/>}
+              <small>{passport.resolution_type==="ai"?"AI-resolved":"Engineer-resolved"} · {(passport.passed_gates?.length??0)} gates passed{(passport.failed_gates?.length??0)>0?`, ${passport.failed_gates!.length} failed`:""}</small>
+              {passport.engineer_edit_ratio!=null && <small>Engineer edit ratio: {(passport.engineer_edit_ratio*100).toFixed(1)}%</small>}
+            </div>}
             {canReview && ticket.status === "pending_review" && (
               <div className="action-stack">
                 <Button variant="primary" disabled={acting} onClick={() => {setReviewAction("approve");setReason("")}}><IconCheckCircle size={15} />Approve</Button>

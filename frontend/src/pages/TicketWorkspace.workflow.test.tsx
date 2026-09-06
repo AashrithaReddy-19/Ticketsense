@@ -18,7 +18,7 @@ vi.mock("../api/client", async () => {
       similar: vi.fn(), trace: vi.fn(), groundedDraft: vi.fn(), drafts: vi.fn(), draftComparison: vi.fn(), pipelineTrace: vi.fn(), technicalEntities: vi.fn(), ticketExplanation: vi.fn(), departmentEngineers: vi.fn(),
       startWork: vi.fn(), createResponseDraft: vi.fn(), submitForReview: vi.fn(), reviewResponse: vi.fn(),
       assignTicket: vi.fn(), reopenTicket: vi.fn(), processAttachment: vi.fn(), generateGroundedDraft: vi.fn(),
-      ticketAction: vi.fn(), safeActions: vi.fn(),
+      ticketAction: vi.fn(), safeActions: vi.fn(), resolutionPassport: vi.fn(),
     },
   };
 });
@@ -46,6 +46,7 @@ function mockCommonInternalCalls() {
   vi.mocked(api.technicalEntities).mockResolvedValue([]);
   vi.mocked(api.ticketExplanation).mockResolvedValue(null as never);
   vi.mocked(api.safeActions).mockResolvedValue([]);
+  vi.mocked(api.resolutionPassport).mockResolvedValue(null as never);
 }
 
 function renderWorkspace() {
@@ -80,6 +81,24 @@ describe("engineer response workflow", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /submit for review/i }));
     await waitFor(() => expect(api.submitForReview).toHaveBeenCalledWith("t1"));
+  });
+
+  it("shows a resolution passport summary for a resolved ticket", async () => {
+    mockCommonInternalCalls();
+    vi.mocked(api.ticket).mockResolvedValue(baseTicket({ status: "resolved_by_ai", resolution_type: "ai", final_response: "Reset your VPN client cache." }));
+    vi.mocked(api.drafts).mockResolvedValue([]);
+    vi.mocked(api.resolutionPassport).mockResolvedValue({
+      ticket_id: "t1", resolution_type: "ai",
+      passed_gates: Array.from({ length: 19 }, (_, i) => `gate_${i}`), failed_gates: [],
+      overall_confidence: 0.95, applicable_threshold: 0.85,
+      integrity_hash: "abc", integrity_valid: true, is_backfilled: false,
+    });
+
+    renderWorkspace();
+    expect(await screen.findByText("Resolution passport")).toBeTruthy();
+    expect(screen.getByText("integrity valid")).toBeTruthy();
+    expect(screen.getByText(/19 gates passed/)).toBeTruthy();
+    expect(api.resolutionPassport).toHaveBeenCalledWith("t1");
   });
 
   it("shows actual additions and removals between selected immutable versions", async () => {
