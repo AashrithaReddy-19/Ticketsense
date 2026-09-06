@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { IconEye, IconEyeOff, IconWifi } from "../components/icons";
 import { Button } from "../components/ui/Button";
@@ -26,6 +27,9 @@ export default function Login() {
   const [error, setError] = useState("");
   const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [ssoConfigured, setSsoConfigured] = useState(false);
+
+  useEffect(() => { api.ssoStatus().then(s => setSsoConfigured(s.oidc.configured || s.saml.configured)).catch(() => setSsoConfigured(false)); }, []);
 
   if (user) return <Navigate to={landingFor(user.role, user.public_role)} replace />;
 
@@ -89,6 +93,9 @@ export default function Login() {
 
         <Button type="submit" variant="primary" className="login-submit" loading={busy}>
           {busy ? "Signing in…" : "Sign in"}
+        </Button>
+        <Button type="button" variant="outline" disabled={!ssoConfigured} title={ssoConfigured ? undefined : "Single sign-on is not configured for this deployment"}>
+          {ssoConfigured ? "Sign in with SSO" : "SSO not configured"}
         </Button>
         <small className="demo-note">Development accounts use the password <b>Demo@123</b></small>
       </form>

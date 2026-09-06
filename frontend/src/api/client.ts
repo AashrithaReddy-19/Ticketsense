@@ -124,6 +124,7 @@ export interface QueueResponse {items:QueueTicket[];page:number;page_size:number
 export interface DescriptionSuggestion {original:string;suggested:string;missing_information_questions:string[];mode:string}
 
 export const api = {
+  ssoStatus: () => request<{oidc:{configured:boolean;issuer_url:string|null};saml:{configured:boolean}}>("/api/auth/sso/status"),
   login: async (email:string,password:string) => {
     const body = new URLSearchParams({ username: email, password });
     let response:Response; try{response=await fetch(`${API_BASE_URL}/api/auth/login`, { method:"POST", credentials:"include",headers:{"Content-Type":"application/x-www-form-urlencoded"}, body })}catch{throw new ApiError("Unable to connect to the TicketSense API. Check that the backend service is running.",0)}

@@ -49,9 +49,25 @@ class Settings(BaseSettings):
     general_rate_limit_requests: int = 600
     general_rate_limit_window_seconds: int = 60
 
+    # Real configuration surface for an enterprise SSO integration. Absent by default —
+    # this repository ships no IdP credentials, and no OIDC/SAML token exchange is
+    # implemented, only honest configuration-status detection (see app/routers/sso.py).
+    oidc_issuer_url: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    saml_metadata_url: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def oidc_configured(self) -> bool:
+        return bool(self.oidc_issuer_url and self.oidc_client_id and self.oidc_client_secret)
+
+    @property
+    def saml_configured(self) -> bool:
+        return bool(self.saml_metadata_url)
 
 
 settings = Settings()
