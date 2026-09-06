@@ -27,6 +27,7 @@ from app.models.v2_governance import (
     ProviderModel, UserCapabilityBundle,
 )
 from app.models.dataset import Dataset, DatasetImportBatch, DatasetRow, DatasetVersion
+from app.models.evaluation import EvaluationArtifact, EvaluationExample, EvaluationMetric, EvaluationRun
 
 __all__ = [
     "Base",
@@ -53,4 +54,5 @@ __all__ = [
     "ModelDeployment", "PromptVersion", "AIUsageEvent", "CapabilityBundle",
     "CapabilityBundlePermission", "UserCapabilityBundle",
     "Dataset", "DatasetVersion", "DatasetImportBatch", "DatasetRow",
+    "EvaluationRun", "EvaluationExample", "EvaluationMetric", "EvaluationArtifact",
 ]
