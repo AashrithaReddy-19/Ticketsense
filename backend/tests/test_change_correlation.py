@@ -46,6 +46,10 @@ async def _teardown(tenant_id):
         await db.execute(text("DELETE FROM knowledge_base WHERE tenant_id=:t"), {"t": t})
         await db.execute(text("DELETE FROM model_deployments WHERE tenant_id=:t"), {"t": t})
         await db.execute(text("DELETE FROM feature_flag_audits WHERE tenant_id=:t"), {"t": t})
+        # FeatureFlag itself is a global catalog table, not tenant-scoped — this test is the
+        # only thing in the suite that creates one, so it must delete it here too, or it
+        # leaks into the real, global feature-flag governance list every tenant's Admins see.
+        await db.execute(text("DELETE FROM feature_flags WHERE key LIKE 'test-flag-%'"))
         await db.execute(text("DELETE FROM incidents WHERE tenant_id=:t"), {"t": t})
         await db.execute(text("DELETE FROM users WHERE tenant_id=:t"), {"t": t})
         await db.execute(text("DELETE FROM departments WHERE tenant_id=:t"), {"t": t})
