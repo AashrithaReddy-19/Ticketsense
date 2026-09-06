@@ -80,8 +80,12 @@ class ModelCreate(BaseModel):
     @field_validator("config_reference")
     @classmethod
     def safe_reference(cls, value: str | None):
-        if value is not None and not value.startswith(("env:", "secret-manager:", "none:")):
-            raise ValueError("config_reference must name an environment variable or secrets-manager reference")
+        # "file:" names a path under ai/models/artifacts/ for locally-hosted
+        # deterministic model artifacts (e.g. the classifier joblib files) —
+        # never a secret, just a relative path within the trusted artifacts
+        # directory, so it's safe alongside the secret-reference prefixes.
+        if value is not None and not value.startswith(("env:", "secret-manager:", "none:", "file:")):
+            raise ValueError("config_reference must name an environment variable, secrets-manager reference, or local artifact file path")
         return value
 
 
@@ -275,6 +279,31 @@ async def create_model(payload: ModelCreate, user: User = Depends(get_current_us
     return model_json(row)
 
 
+class EvaluationStatusUpdate(BaseModel):
+    evaluation_status: str = Field(pattern="^(approved|rejected|insufficient_data)$")
+    reason: str = Field(min_length=5, max_length=2_000)
+
+
+@router.patch("/models/{model_id}/evaluation")
+async def set_evaluation_status(model_id: UUID, payload: EvaluationStatusUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Records an Admin's evaluation verdict on a challenger/shadow candidate
+    — informed by real champion-challenger comparison data (see
+    /api/v2/experiments), never by a model's own self-reported confidence.
+    Only this verdict, never a raw comparison statistic on its own, unlocks
+    the existing /promote endpoint's evaluation_status == 'approved' gate."""
+    await require(db, user, "model:manage")
+    row = await db.scalar(select(ProviderModel).where(ProviderModel.id == model_id, ProviderModel.tenant_id == user.tenant_id).with_for_update())
+    if not row: raise HTTPException(404, "Model not found")
+    if row.lifecycle_role == "champion": raise HTTPException(409, "The active champion's evaluation status is not changed through this endpoint")
+    before = row.evaluation_status
+    row.evaluation_status = payload.evaluation_status
+    row.approved_by = user.id if payload.evaluation_status == "approved" else row.approved_by
+    row.approved_at = datetime.now(timezone.utc) if payload.evaluation_status == "approved" else row.approved_at
+    db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="v2.model.evaluation_status_set", resource_type="provider_model", resource_id=str(row.id), metadata_json={"before": before, "after": payload.evaluation_status, "reason": payload.reason}))
+    await db.commit(); await db.refresh(row)
+    return model_json(row)
+
+
 @router.post("/models/{model_id}/promote")
 async def promote_model(model_id: UUID, payload: DeploymentRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     await require(db, user, "model:manage")
@@ -286,7 +315,14 @@ async def promote_model(model_id: UUID, payload: DeploymentRequest, user: User =
     if target.evaluation_status != "approved": raise HTTPException(409, "Only an approved evaluation candidate can be promoted")
     current = await db.scalar(select(ProviderModel).where(ProviderModel.tenant_id == user.tenant_id, ProviderModel.task_type == target.task_type, ProviderModel.deployment_environment == target.deployment_environment, ProviderModel.lifecycle_role == "champion", ProviderModel.enabled.is_(True)).with_for_update())
     if current and current.id == target.id: return model_json(target)
-    if current: current.lifecycle_role = "retired"; current.enabled = False
+    if current:
+        current.lifecycle_role = "retired"; current.enabled = False
+        # Must be flushed before the new champion is activated: the partial
+        # unique index on (tenant_id, task_type, deployment_environment)
+        # WHERE lifecycle_role='champion' AND enabled=true is checked
+        # per-statement, and SQLAlchemy does not guarantee these two
+        # UPDATEs are emitted in attribute-assignment order.
+        await db.flush()
     target.rollback_target_id = current.id if current else target.rollback_target_id
     target.lifecycle_role = "champion"; target.enabled = True; target.deployed_by = user.id; target.deployed_at = datetime.now(timezone.utc)
     db.add(ModelDeployment(tenant_id=user.tenant_id, task_type=target.task_type, from_model_id=current.id if current else None, to_model_id=target.id, action="promote", actor_id=user.id, reason=payload.reason, evaluation_snapshot={"evaluation_status": target.evaluation_status}))
@@ -303,6 +339,7 @@ async def rollback_model(model_id: UUID, payload: DeploymentRequest, user: User 
     target = await db.scalar(select(ProviderModel).where(ProviderModel.id == current.rollback_target_id, ProviderModel.tenant_id == user.tenant_id).with_for_update())
     if not target: raise HTTPException(409, "Rollback target is unavailable")
     current.lifecycle_role = "retired"; current.enabled = False
+    await db.flush()  # see promote_model: must land before the target is activated, or the partial unique index can spuriously reject it
     target.lifecycle_role = "champion"; target.enabled = True; target.deployed_by = user.id; target.deployed_at = datetime.now(timezone.utc)
     db.add(ModelDeployment(tenant_id=user.tenant_id, task_type=current.task_type, from_model_id=current.id, to_model_id=target.id, action="rollback", actor_id=user.id, reason=payload.reason, evaluation_snapshot={"rollback": True}))
     db.add(AuditLog(tenant_id=user.tenant_id, user_id=user.id, action="v2.model.rolled_back", resource_type="provider_model", resource_id=str(current.id), metadata_json={"target": str(target.id), "reason": payload.reason}))

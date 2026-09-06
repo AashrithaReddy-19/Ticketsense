@@ -13,6 +13,9 @@ vi.mock("../api/client", () => ({
     providerModels: vi.fn(),
     aiUsage: vi.fn(),
     updateFeatureFlag: vi.fn(),
+    compareChampionChallenger: vi.fn(),
+    runShadowSample: vi.fn(),
+    championHealthCheck: vi.fn(),
   },
 }));
 
@@ -55,5 +58,29 @@ describe("V2 AI governance", () => {
       kill_switch: true,
       reason: "Activate emergency kill switch from Admin governance UI",
     }));
+  });
+
+  it("shows real champion/challenger comparison stats, never fabricated ones", async () => {
+    vi.mocked(api.compareChampionChallenger).mockResolvedValue({
+      sample_size: 15, data_sufficient: false, reason: "Only 15 labelled comparisons recorded (minimum 20).",
+      agreement_rate: 0.7333, champion_accuracy: 0.7333, challenger_accuracy: 0.9333, challenger_accuracy_ci: [0.7018, 0.9881],
+      avg_champion_latency_ms: 171.7, avg_challenger_latency_ms: 4.2,
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /shadow & challenger/i }));
+    expect(await screen.findByText("insufficient data")).toBeTruthy();
+    expect(screen.getByText(/Only 15 labelled comparisons/)).toBeTruthy();
+    expect(screen.getByText(/93\.3% \(95% CI 70\.2–98\.8%\)/)).toBeTruthy();
+    expect(api.compareChampionChallenger).toHaveBeenCalledWith("department");
+  });
+
+  it("runs a shadow sample and re-loads the comparison", async () => {
+    vi.mocked(api.compareChampionChallenger).mockResolvedValue({ sample_size: 0, data_sufficient: false, reason: null, agreement_rate: null, champion_accuracy: null, challenger_accuracy: null, challenger_accuracy_ci: null, avg_champion_latency_ms: null, avg_challenger_latency_ms: null });
+    vi.mocked(api.runShadowSample).mockResolvedValue({ status: "sampled", sample_size: 20, missing: [], reason: null });
+    renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /shadow & challenger/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /run shadow sample/i }));
+    await waitFor(() => expect(api.runShadowSample).toHaveBeenCalledWith("department", 20));
+    await waitFor(() => expect(api.compareChampionChallenger).toHaveBeenCalledTimes(2));
   });
 });

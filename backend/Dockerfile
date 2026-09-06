@@ -16,4 +16,4 @@ COPY db /workspace/db
 COPY data /workspace/data
 WORKDIR /workspace/backend
 ENV PYTHONPATH=/workspace/backend:/workspace
-CMD ["sh", "-c", "alembic upgrade head && python ../db/seed/run_seed.py && python ../db/seed/load_knowledge_base.py && python ../data/synthetic_labeled_tickets.py && (test -f ../ai/models/artifacts/department_classifier.joblib || python ../ai/models/train_classifier.py) && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && python ../db/seed/run_seed.py && python ../db/seed/load_knowledge_base.py && python ../data/synthetic_labeled_tickets.py && (test -f ../ai/models/artifacts/department_classifier.joblib || python ../ai/models/train_classifier.py) && (test -f ../ai/models/artifacts/department_classifier_challenger.joblib || python ../ai/models/train_classifier_challenger.py) && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -101,6 +101,13 @@ async def teardown_tenant(tenant_id: UUID) -> None:
         await db.execute(text("DELETE FROM diagnostic_steps WHERE plan_id IN (SELECT id FROM diagnostic_plans WHERE tenant_id=:t)"), {"t": t})
         await db.execute(text("DELETE FROM ticket_message_reads WHERE message_id IN (SELECT id FROM ticket_messages WHERE tenant_id=:t)"), {"t": t})
         await db.execute(text("DELETE FROM ticket_history WHERE ticket_id IN (SELECT id FROM tickets WHERE tenant_id=:t)"), {"t": t})
+        # V2 tables added after this helper was first written — knowledge_base.department_id
+        # and provider_models/shadow_runs/model_deployments.created_by/actor_id have no
+        # ON DELETE CASCADE, so they must be cleared before departments/users below.
+        await db.execute(text("UPDATE tickets SET parent_incident_id=NULL WHERE tenant_id=:t"), {"t": t})
+        for table in ("knowledge_base", "incidents", "graph_edges", "graph_nodes", "resolution_passports",
+                      "counterfactual_explanations", "shadow_runs", "model_deployments", "provider_models"):
+            await db.execute(text(f"DELETE FROM {table} WHERE tenant_id=:t"), {"t": t})
         for table in ("ticket_decisions", "assignment_decisions", "diagnostic_plans", "ticket_messages",
                       "resolution_confirmations", "department_resolution_policies", "pipeline_executions",
                       "ai_drafts", "response_drafts", "ticket_events", "claim_validations",

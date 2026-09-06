@@ -31,6 +31,7 @@ from app.models.evaluation import EvaluationArtifact, EvaluationExample, Evaluat
 from app.models.resolution_passport import ResolutionPassport
 from app.models.counterfactual import CounterfactualExplanation
 from app.models.graph import GraphEdge, GraphNode
+from app.models.experiment import ShadowRun
 
 __all__ = [
     "Base",
@@ -62,4 +63,5 @@ __all__ = [
     "ResolutionPassport",
     "CounterfactualExplanation",
     "GraphNode", "GraphEdge",
+    "ShadowRun",
 ]
