@@ -379,6 +379,7 @@ header { height: var(--header-height); background: var(--surface-card); border-b
 }
 .resolution-passport { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--color-neutral-25); }
 .resolution-passport small { color: var(--text-muted); }
+.dependency-edge-row { grid-template-columns: minmax(280px,2.5fr) minmax(120px,.6fr) minmax(100px,.5fr); }
 .counterfactual-cards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-top: var(--space-4); }
 .counterfactual-cards article { padding: var(--space-4); }
 .counterfactual-cards ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; }

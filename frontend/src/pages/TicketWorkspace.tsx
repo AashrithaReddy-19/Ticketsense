@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type Analysis, type AttachmentMeta, type CounterfactualExplanationView, type DraftComparison, type EngineerSummary, type Evidence, type GroundedDraft, type PipelineTrace, type ResolutionPassportView, type ResponseDraft, type TechnicalEntity, type Ticket, type TicketEvent, type TicketExplanation, type TicketMessage } from "../api/client";
+import { api, type Analysis, type AttachmentMeta, type CounterfactualExplanationView, type DraftComparison, type EngineerSummary, type Evidence, type GraphNeighborhood, type GroundedDraft, type PipelineTrace, type ResolutionPassportView, type ResponseDraft, type TechnicalEntity, type Ticket, type TicketEvent, type TicketExplanation, type TicketMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Badge, ErrorState, Loading, SyncIndicator } from "../components/States";
 import { IconAlert, IconArrowLeft, IconCheckCircle, IconPaperclip, IconRefresh } from "../components/icons";
@@ -47,6 +47,7 @@ export default function TicketWorkspace() {
   const [events, setEvents] = useState<TicketEvent[]>([]);
   const [passport, setPassport] = useState<ResolutionPassportView | null>(null);
   const [counterfactual, setCounterfactual] = useState<CounterfactualExplanationView | null>(null);
+  const [graph, setGraph] = useState<GraphNeighborhood | null>(null);
   const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [messageBody, setMessageBody] = useState("");
   const [internalNote, setInternalNote] = useState(false);
@@ -87,6 +88,7 @@ export default function TicketWorkspace() {
         ]);
         setAnalysis(a); setEvidence(e); setSimilar(s); setTrace(tr); setDraft(dr); setResponseDrafts(versions);
         setPipelineTrace(persistedTrace); setTechnicalEntities(entities); setExplanation(why);
+        setGraph(await api.graphNeighborhood?.(id).catch(() => null) ?? null);
         setDraftComparison(await api.draftComparison(id).catch(() => null));
         if (versions.length >= 2) { setComparisonFrom(String(versions[1].version_number)); setComparisonTo(String(versions[0].version_number)); }
         if (!touchedResponse) setResponseContent(versions[0]?.content || dr?.draft_text || t.ai_draft_reply || "");
@@ -136,7 +138,7 @@ export default function TicketWorkspace() {
   if (!ticket) return null;
 
   const tabs = internal
-    ? [{ key: "overview", label: "Overview" }, { key: "analysis", label: "Analysis" }, { key: "technical", label: "Technical information" }, { key: "explain", label: "Why this decision?" }, { key: "evidence", label: "Evidence" }, { key: "similar", label: "Similar tickets" }, { key: "trace", label: "Trace" }, { key: "pipeline", label: "Pipeline" }]
+    ? [{ key: "overview", label: "Overview" }, { key: "analysis", label: "Analysis" }, { key: "technical", label: "Technical information" }, { key: "explain", label: "Why this decision?" }, { key: "evidence", label: "Evidence" }, { key: "similar", label: "Similar tickets" }, { key: "dependencies", label: "Dependencies" }, { key: "trace", label: "Trace" }, { key: "pipeline", label: "Pipeline" }]
     : [{ key: "overview", label: "Overview" }];
 
   return (
@@ -266,6 +268,24 @@ export default function TicketWorkspace() {
             {similar.length ? similar.map(x => (
               <div className="similar-card" key={x.id}><div><b>{x.subject}</b><span>{x.status}</span></div><strong>{Math.round(x.similarity * 100)}%</strong></div>
             )) : <p className="empty-note">No similar tickets found.</p>}
+          </TabPanel>
+
+          <TabPanel id="workspace" tabKey="dependencies" active={tab}>
+            <h3>Dependency context</h3>
+            <p className="empty-note">{graph?.disclaimer || "Server-enforced, tenant-scoped graph relationships derived from real ticket data — no relationship shown here is fabricated."}</p>
+            {!graph || graph.nodes.length <= 1 ? <p className="empty-note">No graph relationships have been built for this ticket yet.</p> : <>
+              <div className="dependency-graph-list">
+                {graph.edges.map(edge => {
+                  const target = graph.nodes.find(n => n.id === edge.target_node_id);
+                  return <article className="list-row dependency-edge-row" key={edge.id}>
+                    <span>{edge.path}</span>
+                    <Badge value={target?.node_type || edge.edge_type} />
+                    <Badge value={edge.confirmed ? "confirmed" : "inferred"} />
+                  </article>;
+                })}
+              </div>
+              {graph.truncated && <p className="empty-note">Results were truncated at the server-enforced limit.</p>}
+            </>}
           </TabPanel>
 
           <TabPanel id="workspace" tabKey="trace" active={tab}>

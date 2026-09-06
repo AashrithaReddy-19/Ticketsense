@@ -30,6 +30,7 @@ from app.models.dataset import Dataset, DatasetImportBatch, DatasetRow, DatasetV
 from app.models.evaluation import EvaluationArtifact, EvaluationExample, EvaluationMetric, EvaluationRun, ThresholdSimulation
 from app.models.resolution_passport import ResolutionPassport
 from app.models.counterfactual import CounterfactualExplanation
+from app.models.graph import GraphEdge, GraphNode
 
 __all__ = [
     "Base",
@@ -60,4 +61,5 @@ __all__ = [
     "ThresholdSimulation",
     "ResolutionPassport",
     "CounterfactualExplanation",
+    "GraphNode", "GraphEdge",
 ]

@@ -18,7 +18,7 @@ vi.mock("../api/client", async () => {
       similar: vi.fn(), trace: vi.fn(), groundedDraft: vi.fn(), drafts: vi.fn(), draftComparison: vi.fn(), pipelineTrace: vi.fn(), technicalEntities: vi.fn(), ticketExplanation: vi.fn(), departmentEngineers: vi.fn(),
       startWork: vi.fn(), createResponseDraft: vi.fn(), submitForReview: vi.fn(), reviewResponse: vi.fn(),
       assignTicket: vi.fn(), reopenTicket: vi.fn(), processAttachment: vi.fn(), generateGroundedDraft: vi.fn(),
-      ticketAction: vi.fn(), safeActions: vi.fn(), resolutionPassport: vi.fn(), counterfactualExplanation: vi.fn(),
+      ticketAction: vi.fn(), safeActions: vi.fn(), resolutionPassport: vi.fn(), counterfactualExplanation: vi.fn(), graphNeighborhood: vi.fn(),
     },
   };
 });
@@ -48,6 +48,7 @@ function mockCommonInternalCalls() {
   vi.mocked(api.safeActions).mockResolvedValue([]);
   vi.mocked(api.resolutionPassport).mockResolvedValue(null as never);
   vi.mocked(api.counterfactualExplanation).mockResolvedValue(null as never);
+  vi.mocked(api.graphNeighborhood).mockResolvedValue(null as never);
 }
 
 function renderWorkspace() {
@@ -122,6 +123,27 @@ describe("engineer response workflow", () => {
     expect(screen.getByText(/Citation coverage was 64%/)).toBeTruthy();
     expect(screen.getByText(/An additional approved source/)).toBeTruthy();
     expect(screen.getByText("No fixed policy restriction blocked this decision.")).toBeTruthy();
+  });
+
+  it("shows real dependency-graph edges with confirmed/inferred badges", async () => {
+    mockCommonInternalCalls();
+    vi.mocked(api.ticket).mockResolvedValue(baseTicket());
+    vi.mocked(api.drafts).mockResolvedValue([]);
+    vi.mocked(api.graphNeighborhood).mockResolvedValue({
+      nodes: [
+        { id: "n1", node_type: "ticket", external_id: "t1", label: "VPN broken", attributes: {}, confirmed: true },
+        { id: "n2", node_type: "incident", external_id: "i1", label: "VPN outage cluster", attributes: {}, confirmed: false },
+      ],
+      edges: [{ id: "e1", source_node_id: "n1", target_node_id: "n2", edge_type: "clustered_into", confidence: null, provenance: "3 tickets in 72h", confirmed: false, path: "VPN broken --clustered_into--> VPN outage cluster" }],
+      truncated: false, depth_reached: 1,
+      disclaimer: "Edges marked confirmed=false are inferred relationships, not confirmed facts.",
+    });
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("tab", { name: /dependencies/i }));
+    expect(await screen.findByText("VPN broken --clustered_into--> VPN outage cluster")).toBeTruthy();
+    expect(screen.getByText("inferred")).toBeTruthy();
+    expect(screen.getByText(/Edges marked confirmed=false are inferred/)).toBeTruthy();
   });
 
   it("shows actual additions and removals between selected immutable versions", async () => {

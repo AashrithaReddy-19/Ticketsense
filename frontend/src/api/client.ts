@@ -52,6 +52,9 @@ export interface DatasetVersion {id:string;dataset_id:string;version_number:numb
 export interface EvaluationRun {id:string;dataset_version_id:string;target:"department"|"priority"|"sentiment";model_artifact_path:string;model_artifact_hash:string|null;git_commit:string|null;environment_info:Record<string,unknown>;config_snapshot:Record<string,unknown>;split_used:string;status:"completed"|"failed"|"insufficient_data";row_count_considered:number;row_count_excluded:number;exclusion_reasons:Record<string,unknown>;started_at:string;completed_at:string|null;notes:string|null;created_at:string}
 export interface EvaluationRunDetail extends EvaluationRun {overall_metrics:Record<string,number>;per_class_metrics:Record<string,{support:number;precision?:number;recall?:number;f1?:number}>;confusion_matrix:{labels:string[];matrix:number[][]}|null}
 export interface EvaluationExample {id:string;dataset_row_id:string;true_label:string;predicted_label:string;correct:boolean;top_3_hit:boolean|null;predicted_confidence:number|null;redacted_text:string}
+export interface GraphNodeView { id:string; node_type:string; external_id:string; label:string; attributes:Record<string,unknown>; confirmed:boolean }
+export interface GraphEdgeView { id:string; source_node_id:string; target_node_id:string; edge_type:string; confidence:number|null; provenance:string|null; confirmed:boolean; path:string }
+export interface GraphNeighborhood { nodes:GraphNodeView[]; edges:GraphEdgeView[]; truncated:boolean; depth_reached:number; disclaimer:string }
 export interface CounterfactualExplanationView {
   ticket_id: string; ticket_decision_id?: string; decision_outcome: string;
   blocking_gates?: Array<{ code: string; category: "immutable" | "evidence"; label: string; score: number | null; threshold: number | null; detail: string | null; narrative: string }>;
@@ -135,6 +138,7 @@ export const api = {
   thresholdSimulations: () => request<{items:ThresholdSimulation[];page:number;page_size:number;total:number}>("/api/v2/adaptive-thresholds/simulations"),
   resolutionPassport: (ticketId:string) => request<ResolutionPassportView>(`/api/v2/passports/${ticketId}`),
   counterfactualExplanation: (ticketId:string) => request<CounterfactualExplanationView>(`/api/v2/tickets/${ticketId}/counterfactual`),
+  graphNeighborhood: (ticketId:string) => request<GraphNeighborhood>(`/api/v2/graph/tickets/${ticketId}`),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),
   uploadAttachment: (id:string,file:File) => {const body=new FormData();body.append("file",file);return request<AttachmentMeta>(`/api/tickets/${id}/attachment`,{method:"POST",body})},
   attachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment`),
