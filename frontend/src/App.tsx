@@ -25,6 +25,7 @@ import AdminRedTeamLab from "./pages/AdminRedTeamLab";
 import AdminKnowledgeConflicts from "./pages/AdminKnowledgeConflicts";
 import AdminOcrBenchmarkLab from "./pages/AdminOcrBenchmarkLab";
 import AdminConnectors from "./pages/AdminConnectors";
+import AdminProcessMining from "./pages/AdminProcessMining";
 import { Loading } from "./components/States";
 import { ToastProvider } from "./components/ui/Toast";
 import "./tokens.css";
@@ -92,6 +93,7 @@ export function Protected() {
     <Route path="/admin/knowledge-conflicts" element={<CapabilityRoute anyOf={["knowledge_conflict:read"]}><AdminKnowledgeConflicts /></CapabilityRoute>} />
     <Route path="/admin/ocr-benchmark-lab" element={<CapabilityRoute anyOf={["ocr_benchmark:read"]}><AdminOcrBenchmarkLab /></CapabilityRoute>} />
     <Route path="/admin/connectors" element={<CapabilityRoute anyOf={["integration:read", "integration:manage"]}><AdminConnectors /></CapabilityRoute>} />
+    <Route path="/admin/process-mining" element={<CapabilityRoute anyOf={["process_mining:read"]}><AdminProcessMining /></CapabilityRoute>} />
     <Route path="/analytics" element={<CapabilityRoute anyOf={["analytics:department", "analytics:all", "ticket:internal_ai"]}><AnalyticsDashboard /></CapabilityRoute>} />
     <Route path="/tickets" element={<Tickets />} />
     <Route path="/queue" element={<Tickets />} />

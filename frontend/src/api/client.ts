@@ -55,6 +55,9 @@ export interface EvaluationExample {id:string;dataset_row_id:string;true_label:s
 export interface KnowledgeConflictView { id:string; article_a_id:string; article_b_id:string|null; conflict_type:string; severity:string; evidence_excerpt_a:string; evidence_excerpt_b:string|null; confidence:number|null; sample_size:number|null; affected_ticket_ids:string[]; review_state:string; resolved_by:string|null; resolved_at:string|null; resolution_note:string|null; created_at:string }
 export interface OcrEngineStatus { available:boolean; reason:string|null }
 export interface ConnectorView { id:string; provider:string; name:string; enabled:boolean; config_reference:string|null; status:string; last_verified_at:string|null; last_verified_by:string|null; last_error:string|null }
+export interface ProcessMiningVariant { sequence:string[]; ticket_count:number; percentage:number }
+export interface ProcessMiningBottleneck { from_event_type:string; to_event_type:string; sample_size:number; mean_seconds:number; median_seconds:number; p90_seconds:number }
+export interface ProcessMiningRunView { id:string; status:string; ticket_count_considered:number; event_count_considered:number; variants:ProcessMiningVariant[]; bottlenecks:ProcessMiningBottleneck[]; insufficiency_reason:string|null; started_at:string; completed_at:string|null; created_at:string }
 export interface OcrBenchmarkDatasetView { id:string; key:string; name:string; description:string; case_count:number; created_at:string }
 export interface OcrBenchmarkCaseView { id:string; dataset_id:string; image_sha256:string; ground_truth_text:string; source_label:string; tags:string[]; created_at:string }
 export interface OcrBenchmarkResultView { id:string; case_id:string; extracted_text:string; character_error_rate:number; word_error_rate:number; latency_ms:number }
@@ -171,6 +174,9 @@ export const api = {
   ocrRunDetail: (id:string) => request<OcrBenchmarkRunView>(`/api/v2/ocr-benchmark/runs/${id}`),
   connectors: () => request<{items:ConnectorView[]}>("/api/v2/connectors"),
   mintEventStreamToken: () => request<{token:string;expires_in:number;poll_interval_seconds:number}>("/api/v2/events/token",{method:"POST"}),
+  processMiningRuns: () => request<{items:ProcessMiningRunView[];page:number;page_size:number;total:number}>("/api/v2/process-mining/runs"),
+  runProcessMining: () => request<ProcessMiningRunView>("/api/v2/process-mining/runs",{method:"POST"}),
+  processMiningRunDetail: (id:string) => request<ProcessMiningRunView>(`/api/v2/process-mining/runs/${id}`),
   configureConnector: (id:string,config_reference:string) => request<ConnectorView>(`/api/v2/connectors/${id}/configure`,{method:"POST",body:JSON.stringify({config_reference})}),
   verifyConnector: (id:string) => request<ConnectorView>(`/api/v2/connectors/${id}/verify`,{method:"POST"}),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),

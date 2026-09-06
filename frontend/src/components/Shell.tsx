@@ -66,6 +66,7 @@ function navigationForUser(user: { role:string; public_role?:string; permissions
     ["/admin/knowledge-conflicts", IconKnowledge, "Knowledge Conflicts", "knowledge_conflict:read"],
     ["/admin/ocr-benchmark-lab", IconLayers, "OCR Benchmark Lab", "ocr_benchmark:read"],
     ["/admin/connectors", IconPlug, "Connectors", "integration:read"],
+    ["/admin/process-mining", IconChart, "Process Mining", "process_mining:read"],
     ["/analytics", IconChart, "Analytics", "analytics:all"], ["/audit", IconShield, "Audit", "audit:read"],
     ["/settings", IconPlug, "Settings", "integration:manage"],
   ];
