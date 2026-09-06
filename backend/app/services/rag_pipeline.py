@@ -11,6 +11,7 @@ from app.models.ticket_attachment import TicketAttachment
 from app.config import settings
 from app.services.pipeline_metrics import StageTiming, persist_stage_timings, stage_timer
 from app.models.ai_pipeline import ClaimValidation, PipelineExecution, PipelineStage, TechnicalEntity
+from app.models.v2_governance import AIUsageEvent
 
 async def generate_and_store_draft(db:AsyncSession,ticket:Ticket,article_version:str="1.0")->AIDraft:
     """Invoke the graph and idempotently replace the ticket's active draft snapshot.
@@ -79,6 +80,16 @@ async def generate_and_store_draft(db:AsyncSession,ticket:Ticket,article_version
     update_columns["attempt_count"]=AIDraft.attempt_count+1
     stmt=stmt.on_conflict_do_update(index_elements=[AIDraft.ticket_id],set_=update_columns).returning(AIDraft)
     draft=(await db.execute(stmt)).scalar_one()
+    token_metadata=result.get("provider_token_metadata") or {}
+    db.add(AIUsageEvent(
+        tenant_id=ticket.tenant_id,ticket_id=ticket.id,task_type="grounded_draft",
+        provider=result.get("provider") or "pipeline_unavailable",model_version=result.get("model") or PIPELINE_VERSION,
+        latency_ms=int(result.get("provider_latency_ms") or execution.total_duration_ms or 0),
+        input_tokens=token_metadata.get("input_tokens"),output_tokens=token_metadata.get("output_tokens"),
+        estimated_cost_usd=token_metadata.get("estimated_cost_usd"),cache_hit=bool(token_metadata.get("cache_hit",False)),
+        success=execution.status in {"completed","completed_with_fallback"},error_category=execution.failure_stage,
+        correlation_id=correlation_id,metadata_json={"pipeline_version":PIPELINE_VERSION,"cost_source":"provider_metadata" if token_metadata.get("estimated_cost_usd") is not None else "unavailable"},
+    ))
     if result.get("confidence_score") is not None:
         ticket.confidence_score=result["confidence_score"]
         ticket.confidence_features={**snapshots,"confidence_model":{**initial_confidence,"score":result["confidence_score"],"features":result.get("confidence_features",{}),"model_version":result.get("confidence_model_version"),"trained_artifact":result.get("confidence_trained_artifact",False),"gate":result.get("confidence_band"),"low_threshold":state["low_confidence_threshold"],"high_threshold":state["high_confidence_threshold"]}}

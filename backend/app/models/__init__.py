@@ -21,6 +21,11 @@ from app.models.enterprise import (
 from app.models.playbook import Playbook, PlaybookApplication
 from app.models.safe_action import SafeActionApproval, SafeActionDefinition, SafeActionExecution, SafeActionResult
 from app.models.prevention import PreventionRecommendation, RecommendationAction, RecommendationEvidence
+from app.models.v2_governance import (
+    AIUsageEvent, CapabilityBundle, CapabilityBundlePermission, FeatureFlag,
+    FeatureFlagAudit, FeatureFlagOverride, ModelDeployment, PromptVersion,
+    ProviderModel, UserCapabilityBundle,
+)
 
 __all__ = [
     "Base",
@@ -43,4 +48,7 @@ __all__ = [
     "Playbook", "PlaybookApplication",
     "SafeActionDefinition", "SafeActionExecution", "SafeActionApproval", "SafeActionResult",
     "PreventionRecommendation", "RecommendationEvidence", "RecommendationAction",
+    "FeatureFlag", "FeatureFlagOverride", "FeatureFlagAudit", "ProviderModel",
+    "ModelDeployment", "PromptVersion", "AIUsageEvent", "CapabilityBundle",
+    "CapabilityBundlePermission", "UserCapabilityBundle",
 ]

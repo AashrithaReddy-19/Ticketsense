@@ -11,6 +11,7 @@ const modules = [
   { capability: "playbook:manage", to: "/admin/playbooks", title: "Playbooks", detail: "Versioned resolution playbooks for recurring issues, gated by the policy engine.", icon: IconLayers },
   { capability: "safe_action:execute", to: "/admin/safe-actions", title: "Safe actions", detail: "Allowlisted, audited actions with dry-run, confirmation, and risk-based approval.", icon: IconSparkle },
   { capability: "prevention:manage", to: "/admin/prevention", title: "Predictive prevention", detail: "Evidence-backed recommendations from real tenant trends — never a confirmed cause.", icon: IconChart },
+  { capability: "feature:read", to: "/admin/ai-governance", title: "V2 AI governance", detail: "Feature rollout, emergency kill switches, immutable model versions and measured provider usage.", icon: IconShield },
   { capability: "analytics:all", to: "/analytics", title: "Analytics", detail: "Live operational, confidence, workflow and workload metrics.", icon: IconChart },
   { capability: "audit:read", to: "/audit", title: "Audit & compliance", detail: "Search immutable security and workflow events.", icon: IconShield },
   { capability: "integration:manage", to: "/integrations", title: "Settings & integrations", detail: "Inspect connector status without exposing stored configuration.", icon: IconPlug },

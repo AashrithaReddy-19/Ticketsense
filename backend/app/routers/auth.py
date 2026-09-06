@@ -26,7 +26,11 @@ def _set_session_cookies(response: Response, refresh_token: str, csrf: str) -> N
 
 
 async def _permissions(db: AsyncSession, user: User) -> list[str]:
-    rows = await db.scalars(text("""SELECT DISTINCT p.code FROM permissions p JOIN role_permissions rp ON rp.permission_id=p.id JOIN roles r ON r.id=rp.role_id JOIN user_roles ur ON ur.role_id=r.id WHERE ur.user_id=:uid AND ur.tenant_id=:tid ORDER BY p.code""").bindparams(uid=user.id, tid=user.tenant_id))
+    rows = await db.scalars(text("""SELECT code FROM (
+      SELECT p.code FROM permissions p JOIN role_permissions rp ON rp.permission_id=p.id JOIN user_roles ur ON ur.role_id=rp.role_id WHERE ur.user_id=:uid AND ur.tenant_id=:tid
+      UNION
+      SELECT p.code FROM permissions p JOIN capability_bundle_permissions cbp ON cbp.permission_id=p.id JOIN user_capability_bundles ucb ON ucb.bundle_id=cbp.bundle_id JOIN capability_bundles cb ON cb.id=ucb.bundle_id WHERE ucb.user_id=:uid AND ucb.tenant_id=:tid AND cb.is_active=true
+    ) granted ORDER BY code""").bindparams(uid=user.id, tid=user.tenant_id))
     return list(rows)
 
 

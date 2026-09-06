@@ -1,5 +1,10 @@
 # TicketSense
 
+> V2 development is active on `feature/ticketsense-v2-innovation`. The preserved v1
+> release is tagged `ticketsense-enterprise-v1.0`. See
+> [V2 Phase 0–1 audit and governance](docs/V2_PHASE_0_1.md) for the verified baseline,
+> architecture decisions, threat assessment, migration 0026 and honest feature status.
+
 TicketSense is an enterprise-grade, multi-tenant, multi-agent AI support intelligence platform that turns support tickets into explainable, evidence-grounded, confidence-aware resolutions while converting successful support interactions into organizational knowledge.
 
 Development status: the secure Phase 1 foundation is actively being expanded with tenant-scoped queues, human review workflows, and audited ticket routing.

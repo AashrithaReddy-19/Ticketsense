@@ -48,6 +48,8 @@ class TicketState(TypedDict, total=False):
     generated_at: str
     generation_status: str
     generation_error: str | None
+    provider_latency_ms: int | None
+    provider_token_metadata: dict[str, Any]
     citation_validation: dict[str, Any]
     processed_text: str
     technical_entities: list[dict[str, Any]]

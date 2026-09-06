@@ -73,6 +73,12 @@ async def user_has_permission(db: AsyncSession, user: User, permission: str) -> 
           JOIN role_permissions rp ON rp.role_id=ur.role_id
           JOIN permissions p ON p.id=rp.permission_id
           WHERE ur.user_id=:uid AND ur.tenant_id=:tid AND p.code=:permission
+        ) OR EXISTS(
+          SELECT 1 FROM user_capability_bundles ucb
+          JOIN capability_bundle_permissions cbp ON cbp.bundle_id=ucb.bundle_id
+          JOIN permissions p ON p.id=cbp.permission_id
+          JOIN capability_bundles cb ON cb.id=ucb.bundle_id
+          WHERE ucb.user_id=:uid AND ucb.tenant_id=:tid AND cb.is_active=true AND p.code=:permission
         )
     """), {"uid": user.id, "tid": user.tenant_id, "permission": permission})
     return bool(result) or has_permission(user.role, permission)

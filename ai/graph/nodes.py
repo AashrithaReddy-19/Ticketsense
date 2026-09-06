@@ -93,7 +93,7 @@ async def draft_node(state:TicketState)->dict:
     try:
         result=await asyncio.wait_for(get_llm_provider(_LLM_PROVIDER).generate_grounded_draft({"subject":state["subject"],"description":state["description"],"department":state.get("department"),"attachment_text":state.get("attachment_text",""),"attachment_text_is_untrusted":True},state.get("retrieved_chunks",[]),{"article_version":state.get("article_version","1.0")}),timeout=_LLM_TIMEOUT_SECONDS)
         if result.error or not result.content or not result.content.draft_text.strip(): return {"generation_status":"failed","generation_error":result.error or "Empty structured draft"}
-        return {"draft_reply":result.content.draft_text,"citations":[c.model_dump() for c in result.content.citations],"insufficient_evidence":result.content.insufficient_evidence,"provider":result.provider,"model":result.model,"generated_at":result.generated_at.isoformat(),"generation_status":"generated","generation_error":None}
+        return {"draft_reply":result.content.draft_text,"citations":[c.model_dump() for c in result.content.citations],"insufficient_evidence":result.content.insufficient_evidence,"provider":result.provider,"model":result.model,"generated_at":result.generated_at.isoformat(),"generation_status":"generated","generation_error":None,"provider_latency_ms":result.latency_ms,"provider_token_metadata":result.token_metadata or {}}
     except Exception as exc: return {"generation_status":"failed","generation_error":type(exc).__name__}
 
 async def validate_citations_node(state:TicketState)->dict:
