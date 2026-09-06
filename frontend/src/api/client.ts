@@ -52,6 +52,13 @@ export interface DatasetVersion {id:string;dataset_id:string;version_number:numb
 export interface EvaluationRun {id:string;dataset_version_id:string;target:"department"|"priority"|"sentiment";model_artifact_path:string;model_artifact_hash:string|null;git_commit:string|null;environment_info:Record<string,unknown>;config_snapshot:Record<string,unknown>;split_used:string;status:"completed"|"failed"|"insufficient_data";row_count_considered:number;row_count_excluded:number;exclusion_reasons:Record<string,unknown>;started_at:string;completed_at:string|null;notes:string|null;created_at:string}
 export interface EvaluationRunDetail extends EvaluationRun {overall_metrics:Record<string,number>;per_class_metrics:Record<string,{support:number;precision?:number;recall?:number;f1?:number}>;confusion_matrix:{labels:string[];matrix:number[][]}|null}
 export interface EvaluationExample {id:string;dataset_row_id:string;true_label:string;predicted_label:string;correct:boolean;top_3_hit:boolean|null;predicted_confidence:number|null;redacted_text:string}
+export interface CounterfactualExplanationView {
+  ticket_id: string; ticket_decision_id?: string; decision_outcome: string;
+  blocking_gates?: Array<{ code: string; category: "immutable" | "evidence"; label: string; score: number | null; threshold: number | null; detail: string | null; narrative: string }>;
+  immutable_reasons?: string[];
+  evidence_gaps?: Array<{ code: string; narrative: string; minimal_safe_change: string | null }>;
+  narrative: string; requires_human_review?: boolean; created_at?: string;
+}
 export interface ResolutionPassportView {
   ticket_id: string; resolution_type: "ai" | "engineer";
   public_citations?: Array<{ citation_id: string | null; article_version: string | null }>;
@@ -127,6 +134,7 @@ export const api = {
   simulateThreshold: (payload:{proposed_threshold:number;department_id?:string;category?:string}) => request<ThresholdSimulation>("/api/v2/adaptive-thresholds/simulate",{method:"POST",body:JSON.stringify(payload)}),
   thresholdSimulations: () => request<{items:ThresholdSimulation[];page:number;page_size:number;total:number}>("/api/v2/adaptive-thresholds/simulations"),
   resolutionPassport: (ticketId:string) => request<ResolutionPassportView>(`/api/v2/passports/${ticketId}`),
+  counterfactualExplanation: (ticketId:string) => request<CounterfactualExplanationView>(`/api/v2/tickets/${ticketId}/counterfactual`),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),
   uploadAttachment: (id:string,file:File) => {const body=new FormData();body.append("file",file);return request<AttachmentMeta>(`/api/tickets/${id}/attachment`,{method:"POST",body})},
   attachment: (id:string) => request<AttachmentMeta>(`/api/tickets/${id}/attachment`),

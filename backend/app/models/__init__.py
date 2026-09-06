@@ -29,6 +29,7 @@ from app.models.v2_governance import (
 from app.models.dataset import Dataset, DatasetImportBatch, DatasetRow, DatasetVersion
 from app.models.evaluation import EvaluationArtifact, EvaluationExample, EvaluationMetric, EvaluationRun, ThresholdSimulation
 from app.models.resolution_passport import ResolutionPassport
+from app.models.counterfactual import CounterfactualExplanation
 
 __all__ = [
     "Base",
@@ -58,4 +59,5 @@ __all__ = [
     "EvaluationRun", "EvaluationExample", "EvaluationMetric", "EvaluationArtifact",
     "ThresholdSimulation",
     "ResolutionPassport",
+    "CounterfactualExplanation",
 ]

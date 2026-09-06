@@ -18,7 +18,7 @@ vi.mock("../api/client", async () => {
       similar: vi.fn(), trace: vi.fn(), groundedDraft: vi.fn(), drafts: vi.fn(), draftComparison: vi.fn(), pipelineTrace: vi.fn(), technicalEntities: vi.fn(), ticketExplanation: vi.fn(), departmentEngineers: vi.fn(),
       startWork: vi.fn(), createResponseDraft: vi.fn(), submitForReview: vi.fn(), reviewResponse: vi.fn(),
       assignTicket: vi.fn(), reopenTicket: vi.fn(), processAttachment: vi.fn(), generateGroundedDraft: vi.fn(),
-      ticketAction: vi.fn(), safeActions: vi.fn(), resolutionPassport: vi.fn(),
+      ticketAction: vi.fn(), safeActions: vi.fn(), resolutionPassport: vi.fn(), counterfactualExplanation: vi.fn(),
     },
   };
 });
@@ -47,6 +47,7 @@ function mockCommonInternalCalls() {
   vi.mocked(api.ticketExplanation).mockResolvedValue(null as never);
   vi.mocked(api.safeActions).mockResolvedValue([]);
   vi.mocked(api.resolutionPassport).mockResolvedValue(null as never);
+  vi.mocked(api.counterfactualExplanation).mockResolvedValue(null as never);
 }
 
 function renderWorkspace() {
@@ -99,6 +100,28 @@ describe("engineer response workflow", () => {
     expect(screen.getByText("integrity valid")).toBeTruthy();
     expect(screen.getByText(/19 gates passed/)).toBeTruthy();
     expect(api.resolutionPassport).toHaveBeenCalledWith("t1");
+  });
+
+  it("shows why-human-review and missing-evidence cards from a real counterfactual explanation", async () => {
+    mockCommonInternalCalls();
+    vi.mocked(api.ticket).mockResolvedValue(baseTicket({ status: "awaiting_assignment" }));
+    vi.mocked(api.drafts).mockResolvedValue([]);
+    vi.mocked(api.counterfactualExplanation).mockResolvedValue({
+      ticket_id: "t1", decision_outcome: "assign_engineer",
+      blocking_gates: [{ code: "citation_coverage", category: "evidence", label: "Citation coverage", score: 0.64, threshold: 0.8, detail: null, narrative: "Citation coverage was 64%, below the required 80%." }],
+      immutable_reasons: [],
+      evidence_gaps: [{ code: "citation_coverage", narrative: "Citation coverage was 64%, below the required 80%.", minimal_safe_change: "An additional approved source covering the uncited claims would satisfy this gate." }],
+      narrative: "Human assistance is required because citation coverage did not pass.",
+      requires_human_review: true,
+    });
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("tab", { name: /why this decision/i }));
+    expect(await screen.findByText("Why human review?")).toBeTruthy();
+    expect(screen.getByText("What evidence is missing?")).toBeTruthy();
+    expect(screen.getByText(/Citation coverage was 64%/)).toBeTruthy();
+    expect(screen.getByText(/An additional approved source/)).toBeTruthy();
+    expect(screen.getByText("No fixed policy restriction blocked this decision.")).toBeTruthy();
   });
 
   it("shows actual additions and removals between selected immutable versions", async () => {

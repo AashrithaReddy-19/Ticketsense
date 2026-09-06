@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type Analysis, type AttachmentMeta, type DraftComparison, type EngineerSummary, type Evidence, type GroundedDraft, type PipelineTrace, type ResolutionPassportView, type ResponseDraft, type TechnicalEntity, type Ticket, type TicketEvent, type TicketExplanation, type TicketMessage } from "../api/client";
+import { api, type Analysis, type AttachmentMeta, type CounterfactualExplanationView, type DraftComparison, type EngineerSummary, type Evidence, type GroundedDraft, type PipelineTrace, type ResolutionPassportView, type ResponseDraft, type TechnicalEntity, type Ticket, type TicketEvent, type TicketExplanation, type TicketMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Badge, ErrorState, Loading, SyncIndicator } from "../components/States";
 import { IconAlert, IconArrowLeft, IconCheckCircle, IconPaperclip, IconRefresh } from "../components/icons";
@@ -46,6 +46,7 @@ export default function TicketWorkspace() {
   const [comparisonTo, setComparisonTo] = useState("");
   const [events, setEvents] = useState<TicketEvent[]>([]);
   const [passport, setPassport] = useState<ResolutionPassportView | null>(null);
+  const [counterfactual, setCounterfactual] = useState<CounterfactualExplanationView | null>(null);
   const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [messageBody, setMessageBody] = useState("");
   const [internalNote, setInternalNote] = useState(false);
@@ -68,6 +69,7 @@ export default function TicketWorkspace() {
       const t = await api.ticket(id);
       setTicket(t);
       setPassport(t.final_response ? await api.resolutionPassport?.(id).catch(() => null) ?? null : null);
+      setCounterfactual(await api.counterfactualExplanation?.(id).catch(() => null) ?? null);
       if (canAssign && t.department_id) {
         const available = await api.departmentEngineers(t.department_id).catch(() => []);
         setEngineers(available);
@@ -248,6 +250,10 @@ export default function TicketWorkspace() {
           <TabPanel id="workspace" tabKey="explain" active={tab}>
             <h3>Why did TicketSense make this decision?</h3>
             {!explanation?<p className="empty-note">No persisted explanation is available.</p>:<div className="explain-grid"><Meta label="Predicted category" value={explanation.predicted_category||"Not available"}/><Meta label="Predicted priority" value={explanation.predicted_priority||"Not available"}/><Meta label="Routing reason" value={explanation.routing_reason||"Not available"}/><Meta label="Assignment reason" value={explanation.assignment_reason||"Not available"}/><Meta label="Top evidence similarity" value={explanation.top_retrieval_similarity==null?"Not available":`${Math.round(explanation.top_retrieval_similarity*100)}%`}/><Meta label="Retrieval score gap" value={explanation.retrieval_score_gap==null?"Not available":explanation.retrieval_score_gap.toFixed(3)}/><Meta label="Valid evidence sources" value={String(explanation.valid_evidence_count)}/><Meta label="Confidence band" value={explanation.confidence_band||"Not available"}/><Meta label="Grounding result" value={explanation.grounding_status||"Not available"}/><Meta label="Human-review decision" value={explanation.human_review_decision||"Not available"}/><div className="factor-list"><b>Positive factors</b>{explanation.positive_factors.length?explanation.positive_factors.map(item=><span key={item}>{item}</span>):<span>Not available</span>}</div><div className="factor-list"><b>Risk factors</b>{explanation.risk_factors.length?explanation.risk_factors.map(item=><span key={item}>{item}</span>):<span>None recorded</span>}</div><small className="explain-disclaimer">{explanation.disclaimer}</small></div>}
+            {counterfactual && <div className="counterfactual-cards">
+              <article className="panel"><h4>Why human review?</h4>{counterfactual.immutable_reasons?.length ? <ul>{counterfactual.immutable_reasons.map(reason=><li key={reason}>{reason}</li>)}</ul> : <p className="empty-note">No fixed policy restriction blocked this decision.</p>}</article>
+              <article className="panel"><h4>What evidence is missing?</h4>{counterfactual.evidence_gaps?.length ? <ul>{counterfactual.evidence_gaps.map(gap=><li key={gap.code}>{gap.narrative}{gap.minimal_safe_change && <><br/><small>{gap.minimal_safe_change}</small></>}</li>)}</ul> : <p className="empty-note">No evidence or quality gate is currently missing.</p>}</article>
+            </div>}
           </TabPanel>
 
           <TabPanel id="workspace" tabKey="evidence" active={tab}>
@@ -303,6 +309,7 @@ export default function TicketWorkspace() {
           <aside className="panel ai-panel">
             <h2>Ticket progress</h2>
             <p>Your support team is reviewing this request. Internal analysis, confidence and staff notes remain protected.</p>
+            {counterfactual?.requires_human_review && <div className="resolution-passport" aria-label="Why human review"><b>Why human review?</b><small>{counterfactual.narrative}</small></div>}
             {["resolved","resolved_by_ai","resolved_by_engineer"].includes(ticket.status) && ticket.final_response && <Button variant="primary" disabled={acting} onClick={() => confirmResolution("needs_help")} icon={<IconRefresh size={15} />}>I still need help</Button>}
           </aside>
         )}
