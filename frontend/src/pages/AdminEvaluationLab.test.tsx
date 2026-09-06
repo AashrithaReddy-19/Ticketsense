@@ -17,6 +17,8 @@ vi.mock("../api/client", () => ({
     createEvaluationRun: vi.fn(),
     evaluationRunDetail: vi.fn(),
     evaluationRunExamples: vi.fn(),
+    simulateThreshold: vi.fn(),
+    thresholdSimulations: vi.fn(),
   },
 }));
 
@@ -43,6 +45,7 @@ describe("Evaluation lab", () => {
     vi.mocked(api.evaluationRuns).mockResolvedValue({ items: [run], page: 1, page_size: 50, total: 1 });
     vi.mocked(api.datasetVersions).mockResolvedValue({ items: [] });
     vi.mocked(api.createDataset).mockResolvedValue(dataset);
+    vi.mocked(api.thresholdSimulations).mockResolvedValue({ items: [], page: 1, page_size: 50, total: 0 });
   });
 
   it("renders registered datasets without sample metrics", async () => {
@@ -80,5 +83,21 @@ describe("Evaluation lab", () => {
     await waitFor(() => expect(screen.getByText("accuracy")).toBeTruthy());
     expect(screen.getByText("83.00%")).toBeTruthy();
     expect(screen.getByText("SAP transport failed")).toBeTruthy();
+  });
+
+  it("runs a threshold simulation and shows an honest insufficient-data result", async () => {
+    vi.mocked(api.simulateThreshold).mockResolvedValue({
+      id: "sim-1", department_id: null, category: null, proposed_threshold: 0.85, sample_size: 4,
+      auto_resolved_at_threshold: 2, data_sufficient: false,
+      insufficiency_reasons: ["Only 4 historical decisions have a recorded confidence score in this scope (minimum 30)."],
+      estimated_coverage: 0.5, estimated_referral_rate: 0.5, historical_false_resolution_rate: 0,
+      confidence_interval: [0, 0.6], sensitive_category_override: false, based_on: "ticket_decisions", created_at: "2026-01-01T00:00:00Z",
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /threshold simulation/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /run simulation/i }));
+    await waitFor(() => expect(api.simulateThreshold).toHaveBeenCalledWith({ proposed_threshold: 0.85, category: undefined }));
+    expect(await screen.findByText("insufficient data")).toBeTruthy();
+    expect(screen.getByText(/Only 4 historical decisions/)).toBeTruthy();
   });
 });

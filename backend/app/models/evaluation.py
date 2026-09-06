@@ -67,3 +67,28 @@ class EvaluationArtifact(Base, UUIDPKMixin, CreatedAtMixin):
     run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
     artifact_type: Mapped[str] = mapped_column(String(40), nullable=False)
     content: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class ThresholdSimulation(Base, UUIDPKMixin, CreatedAtMixin):
+    """A read-only, historical-data-driven estimate of what a proposed
+    auto-resolution confidence threshold would have meant for real past
+    decisions. Never deployed automatically — there is deliberately no
+    column or code path here that applies this threshold to a live
+    DepartmentResolutionPolicy."""
+    __tablename__ = "threshold_simulations"
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    department_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), index=True)
+    category: Mapped[str | None] = mapped_column(String(120))
+    proposed_threshold: Mapped[float] = mapped_column(Numeric(4, 3), nullable=False)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    auto_resolved_at_threshold: Mapped[int] = mapped_column(Integer, nullable=False)
+    data_sufficient: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    insufficiency_reasons: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    estimated_coverage: Mapped[float | None] = mapped_column(Numeric(6, 4))
+    estimated_referral_rate: Mapped[float | None] = mapped_column(Numeric(6, 4))
+    historical_false_resolution_rate: Mapped[float | None] = mapped_column(Numeric(6, 4))
+    confidence_interval_low: Mapped[float | None] = mapped_column(Numeric(6, 4))
+    confidence_interval_high: Mapped[float | None] = mapped_column(Numeric(6, 4))
+    sensitive_category_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    based_on: Mapped[str] = mapped_column(String(40), nullable=False, default="ticket_decisions")
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)

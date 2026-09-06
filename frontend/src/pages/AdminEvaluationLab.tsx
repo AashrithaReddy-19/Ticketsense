@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Dataset, type DatasetVersion, type EvaluationExample, type EvaluationRun, type EvaluationRunDetail } from "../api/client";
+import { api, type Dataset, type DatasetVersion, type EvaluationExample, type EvaluationRun, type EvaluationRunDetail, type ThresholdSimulation } from "../api/client";
 import { Badge, Empty, ErrorState, Loading } from "../components/States";
 import { Button } from "../components/ui/Button";
 import { Tabs, TabPanel } from "../components/ui/Tabs";
@@ -39,7 +39,7 @@ export default function AdminEvaluationLab() {
         <p>Reproducible dataset registry and classification evaluation runs against the deployed classifier artifacts. Every metric shown here is computed from real predictions — nothing is a sample or placeholder.</p></div>
       <div className="live"><span />No sample metrics</div>
     </div>
-    <Tabs idPrefix="eval-lab" active={tab} onChange={setTab} tabs={[{ key: "datasets", label: "Datasets" }, { key: "runs", label: "Evaluation runs" }]} />
+    <Tabs idPrefix="eval-lab" active={tab} onChange={setTab} tabs={[{ key: "datasets", label: "Datasets" }, { key: "runs", label: "Evaluation runs" }, { key: "thresholds", label: "Threshold simulation" }]} />
     <TabPanel id="eval-lab" tabKey="datasets" active={tab}>
       <DatasetsPanel datasets={datasets} onChanged={load} toast={toast} />
     </TabPanel>
@@ -47,6 +47,9 @@ export default function AdminEvaluationLab() {
       {selectedRun
         ? <RunDetailPanel runId={selectedRun} onBack={() => setSelectedRun(null)} />
         : <RunsPanel datasets={datasets} runs={runs} onChanged={load} onSelect={setSelectedRun} toast={toast} />}
+    </TabPanel>
+    <TabPanel id="eval-lab" tabKey="thresholds" active={tab}>
+      <ThresholdSimulationPanel toast={toast} />
     </TabPanel>
   </div>;
 }
@@ -220,5 +223,59 @@ function RunDetailPanel({ runId, onBack }: { runId: string; onBack: () => void }
           {errors.map(example => <div className="list-row eval-error-row" key={example.id}><span>{example.redacted_text}</span><span>{example.true_label}</span><span>{example.predicted_label}</span></div>)}
         </div>
       </>}
+  </div>;
+}
+
+function ThresholdSimulationPanel({ toast }: { toast: (message: string, tone?: "success" | "danger") => void }) {
+  const [threshold, setThreshold] = useState("0.85");
+  const [category, setCategory] = useState("");
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<ThresholdSimulation | null>(null);
+  const [history, setHistory] = useState<ThresholdSimulation[]>([]);
+
+  async function loadHistory() {
+    try { const response = await api.thresholdSimulations(); setHistory(response.items); } catch { /* lab may be disabled */ }
+  }
+  useEffect(() => { loadHistory(); }, []);
+
+  async function run() {
+    const value = Number(threshold);
+    if (!Number.isFinite(value) || value < 0 || value > 1) { toast("Threshold must be a number between 0 and 1.", "danger"); return; }
+    setRunning(true);
+    try {
+      const simulation = await api.simulateThreshold({ proposed_threshold: value, category: category || undefined });
+      setResult(simulation);
+      toast(simulation.data_sufficient ? "Simulation complete." : "Simulation complete — historical data is not yet sufficient to act on.", simulation.data_sufficient ? "success" : "danger");
+      loadHistory();
+    } catch (e) { toast(e instanceof Error ? e.message : "Unable to run simulation", "danger"); }
+    finally { setRunning(false); }
+  }
+
+  return <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    <p>Estimates what a proposed auto-resolution confidence threshold would have meant for real historical decisions. This never changes the live resolution policy — promoting a threshold remains a separate, explicit Admin action.</p>
+    <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+      <label>Proposed threshold (0–1)<input value={threshold} onChange={e => setThreshold(e.target.value)} style={{ width: "6rem" }} /></label>
+      <label>Category (optional)<input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Networking" /></label>
+      <Button variant="primary" loading={running} onClick={run}>Run simulation</Button>
+    </div>
+    {result && <div className="panel" style={{ padding: "0.75rem" }}>
+      <div><Badge value={result.data_sufficient ? "data sufficient" : "insufficient data"} /> {result.sensitive_category_override && <Badge value="human review required" />}</div>
+      <div className="eval-lab-table">
+        <div className="list-head eval-metric-row"><span>Metric</span><span>Value</span></div>
+        <div className="list-row eval-metric-row"><span>Sample size</span><span>{result.sample_size}</span></div>
+        <div className="list-row eval-metric-row"><span>Would auto-resolve at this threshold</span><span>{result.auto_resolved_at_threshold}</span></div>
+        <div className="list-row eval-metric-row"><span>Estimated coverage</span><span>{result.estimated_coverage == null ? "unavailable" : `${(result.estimated_coverage * 100).toFixed(1)}%`}</span></div>
+        <div className="list-row eval-metric-row"><span>Estimated referral rate</span><span>{result.estimated_referral_rate == null ? "unavailable" : `${(result.estimated_referral_rate * 100).toFixed(1)}%`}</span></div>
+        <div className="list-row eval-metric-row"><span>Historical false-resolution rate</span><span>{result.historical_false_resolution_rate == null ? "unavailable" : `${(result.historical_false_resolution_rate * 100).toFixed(1)}% (95% CI ${result.confidence_interval ? `${(result.confidence_interval[0] * 100).toFixed(1)}–${(result.confidence_interval[1] * 100).toFixed(1)}%` : "n/a"})`}</span></div>
+      </div>
+      {result.insufficiency_reasons.length > 0 && <ul>{result.insufficiency_reasons.map(reason => <li key={reason}><small>{reason}</small></li>)}</ul>}
+    </div>}
+    {history.length > 0 && <div>
+      <h3>Recent simulations</h3>
+      <div className="eval-lab-table">
+        <div className="list-head eval-metric-row"><span>Threshold / category</span><span>Sample</span></div>
+        {history.slice(0, 10).map(item => <div className="list-row eval-metric-row" key={item.id}><span>{item.proposed_threshold} {item.category ? `· ${item.category}` : ""}</span><span>{item.sample_size} {item.data_sufficient ? "" : "(insufficient)"}</span></div>)}
+      </div>
+    </div>}
   </div>;
 }
