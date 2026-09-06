@@ -26,3 +26,6 @@ async def get_visible_ticket(db:AsyncSession,user:User,ticket_id):
     ticket=await db.scalar(visible_ticket_query(user).where(Ticket.id==ticket_id))
     if not ticket: raise HTTPException(404,"Ticket not found")
     return ticket
+
+async def is_ticket_visible(db:AsyncSession,user:User,ticket_id)->bool:
+    return (await db.scalar(select(Ticket.id).where(visibility_conditions(user),Ticket.id==ticket_id))) is not None

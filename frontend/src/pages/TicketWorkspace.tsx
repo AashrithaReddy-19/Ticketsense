@@ -13,6 +13,7 @@ import { Timeline } from "../components/ui/Utility";
 import { useToast } from "../components/ui/Toast";
 import { buildPipelineStages, ExplainPipeline, PipelineView } from "../components/ui/Pipeline";
 import { useAutoRefresh } from "../lib/useAutoRefresh";
+import { useLiveEvents } from "../lib/useLiveEvents";
 import SafeActionPanel from "../components/SafeActionPanel";
 
 type Similar = { id: string; subject: string; status: string; similarity: number };
@@ -110,6 +111,7 @@ export default function TicketWorkspace() {
   async function confirmResolution(outcome:"solved"|"needs_help") { setActing(true); try { await api.confirmResolution(id,outcome,outcome==="needs_help"?"The proposed solution did not resolve the issue.":undefined);await load();toast(outcome==="solved"?"Resolution confirmed.":"Ticket reopened and routed to an Engineer.","success")} catch(e){toast(e instanceof Error?e.message:"Unable to save confirmation","danger")} finally{setActing(false)} }
   useEffect(() => { load(); }, [id, internal]); // eslint-disable-line react-hooks/exhaustive-deps
   const { status: syncStatus, lastSyncedAt, retryNow } = useAutoRefresh(() => load({ silent: true }), undefined, !loading && !!ticket);
+  useLiveEvents(!loading && !!ticket, () => retryNow()); // low-latency nudge only; polling above never stops
 
   async function generate() {
     setActing(true); setError("");

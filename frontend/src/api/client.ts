@@ -170,6 +170,7 @@ export const api = {
   createOcrRun: (payload:{dataset_id:string;engine:string}) => request<OcrBenchmarkRunView>("/api/v2/ocr-benchmark/runs",{method:"POST",body:JSON.stringify(payload)}),
   ocrRunDetail: (id:string) => request<OcrBenchmarkRunView>(`/api/v2/ocr-benchmark/runs/${id}`),
   connectors: () => request<{items:ConnectorView[]}>("/api/v2/connectors"),
+  mintEventStreamToken: () => request<{token:string;expires_in:number;poll_interval_seconds:number}>("/api/v2/events/token",{method:"POST"}),
   configureConnector: (id:string,config_reference:string) => request<ConnectorView>(`/api/v2/connectors/${id}/configure`,{method:"POST",body:JSON.stringify({config_reference})}),
   verifyConnector: (id:string) => request<ConnectorView>(`/api/v2/connectors/${id}/verify`,{method:"POST"}),
   assistDescription: (subject:string,description:string) => request<DescriptionSuggestion>("/api/tickets/assist-description",{method:"POST",body:JSON.stringify({subject,description})}),

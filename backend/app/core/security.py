@@ -34,6 +34,24 @@ def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
 
 
+def create_sse_token(user_id: UUID, tenant_id: UUID, ttl_seconds: int = 120) -> str:
+    """A narrowly-scoped, short-lived token for authorizing a single SSE
+    connection via a URL query parameter (browser EventSource cannot set an
+    Authorization header). Marked with type="sse" so get_current_user
+    explicitly refuses it as a general bearer token — a short-lived value
+    that still ends up in a server access log or browser history must not
+    be usable to call the rest of the API."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "tenant_id": str(tenant_id),
+        "type": "sse",
+        "iat": now,
+        "exp": now + timedelta(seconds=ttl_seconds),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
 def create_refresh_token(user_id: UUID, session_id: UUID) -> tuple[str, datetime]:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(days=settings.refresh_expire_days)

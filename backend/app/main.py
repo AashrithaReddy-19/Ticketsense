@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.config import settings
 from app.database import async_session_maker
-from app.routers import adaptive_thresholds, analytics, attachments, auth, connectors, counterfactual, datasets, enterprise, evaluation, experiments, graph, health, knowledge_conflicts, ocr_benchmark, platform, playbooks, prevention, queues, red_team, release_b, resolution_passport, safe_actions, tickets, v2_governance, workflow
+from app.routers import adaptive_thresholds, analytics, attachments, auth, connectors, counterfactual, datasets, enterprise, evaluation, events, experiments, graph, health, knowledge_conflicts, ocr_benchmark, platform, playbooks, prevention, queues, red_team, release_b, resolution_passport, safe_actions, tickets, v2_governance, workflow
+from app.services.events.bridge import run_event_bridge
 
 async def cleanup_sessions() -> None:
     while True:
@@ -23,9 +24,11 @@ async def cleanup_sessions() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     task=asyncio.create_task(cleanup_sessions())
+    event_bridge_task=asyncio.create_task(run_event_bridge(async_session_maker))
     yield
-    task.cancel()
+    task.cancel(); event_bridge_task.cancel()
     with suppress(asyncio.CancelledError): await task
+    with suppress(asyncio.CancelledError): await event_bridge_task
 
 app = FastAPI(title="TicketSense API", version="0.1.0", lifespan=lifespan)
 
@@ -80,3 +83,4 @@ app.include_router(red_team.router)
 app.include_router(knowledge_conflicts.router)
 app.include_router(ocr_benchmark.router)
 app.include_router(connectors.router)
+app.include_router(events.router)

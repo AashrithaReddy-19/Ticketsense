@@ -25,6 +25,27 @@ async def get_current_user(
 ) -> User:
     try:
         payload = decode_access_token(token)
+        if payload.get("type") == "sse":
+            # A narrowly-scoped SSE connection token must never work as a general bearer token.
+            raise _CREDENTIALS_ERROR
+        user_id = UUID(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise _CREDENTIALS_ERROR
+
+    user = await db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise _CREDENTIALS_ERROR
+    return user
+
+
+async def get_user_from_sse_token(token: str, db: AsyncSession) -> User:
+    """Authorizes a single SSE connection from its query-parameter token.
+    Accepts only a token minted by create_sse_token — a normal access token
+    presented here is rejected, keeping the two token types non-interchangeable."""
+    try:
+        payload = decode_access_token(token)
+        if payload.get("type") != "sse":
+            raise _CREDENTIALS_ERROR
         user_id = UUID(payload["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):
         raise _CREDENTIALS_ERROR

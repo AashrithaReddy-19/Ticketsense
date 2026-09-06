@@ -7,6 +7,7 @@ import { IconPlus } from "../components/icons";
 import { Button } from "../components/ui/Button";
 import { FilterBar, Pagination, SearchInput } from "../components/ui/Utility";
 import { useAutoRefresh } from "../lib/useAutoRefresh";
+import { useLiveEvents } from "../lib/useLiveEvents";
 
 const PAGE_SIZE = 10;
 
@@ -34,6 +35,7 @@ export default function Tickets({ escalated = false }: { escalated?: boolean }) 
   useEffect(() => { load(); }, [location.search, escalated]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(1); }, [priority, sort, status]);
   const { status: syncStatus, lastSyncedAt, retryNow } = useAutoRefresh(() => load({ silent: true }), undefined, !loading && !error);
+  useLiveEvents(!loading && !error, () => retryNow()); // low-latency nudge only; polling above never stops
 
   function search(e: FormEvent) { e.preventDefault(); navigate(`/tickets${q ? `?q=${encodeURIComponent(q)}` : ""}`); load(); }
   function clearFilters() { setQ(""); setStatus(escalated ? "escalated" : ""); setPriority(""); setSort("newest"); navigate("/tickets"); }
