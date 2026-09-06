@@ -13,6 +13,7 @@ vi.mock("../api/client", () => ({
     scanForIncidents: vi.fn(),
     incidentTickets: vi.fn().mockResolvedValue([]),
     incidentRootCause: vi.fn().mockResolvedValue(null),
+    incidentChangeCorrelations: vi.fn().mockRejectedValue(new Error("Feature 'change_correlation' is unavailable")),
     confirmIncident: vi.fn(),
     dismissIncident: vi.fn(),
     notifyIncidentCustomers: vi.fn(),
@@ -56,6 +57,18 @@ describe("Incidents page", () => {
     await waitFor(() => expect(screen.getByText("Possible vpn incident")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /view details/i }));
     await waitFor(() => expect(screen.getByText(/not a confirmed root cause/i)).toBeTruthy());
+  });
+
+  it("shows real change-correlation hypotheses labelled as temporal proximity only", async () => {
+    vi.mocked(api.incidents).mockResolvedValue([candidateIncident as never]);
+    vi.mocked(api.incidentChangeCorrelations).mockResolvedValue({
+      hypotheses: [{ change_type: "feature_flag", description: "Feature flag 'new-router' was enabled", occurred_at: "2026-01-01T00:00:00Z", hours_before_incident: 2.5, note: "Temporal proximity only — not a confirmed cause." }],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Possible vpn incident")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /view details/i }));
+    await waitFor(() => expect(screen.getByText(/Feature flag 'new-router' was enabled/)).toBeTruthy());
+    expect(screen.getByText(/temporal proximity only, not a confirmed cause/i)).toBeTruthy();
   });
 
   it("runs a manual scan and reports the result", async () => {

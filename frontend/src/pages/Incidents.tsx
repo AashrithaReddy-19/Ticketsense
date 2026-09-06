@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Incident, type IncidentTicketSummary, type RootCauseHypothesis } from "../api/client";
+import { api, type ChangeCorrelationHypothesis, type Incident, type IncidentTicketSummary, type RootCauseHypothesis } from "../api/client";
 import { Badge, Empty, ErrorState, Loading } from "../components/States";
 import { IconRefresh } from "../components/icons";
 import { Button } from "../components/ui/Button";
@@ -11,11 +11,14 @@ function IncidentDetail({ incident, onChanged }: { incident: Incident; onChanged
   const toast = useToast();
   const [tickets, setTickets] = useState<IncidentTicketSummary[] | null>(null);
   const [hypothesis, setHypothesis] = useState<RootCauseHypothesis | null>(null);
+  const [changeHypotheses, setChangeHypotheses] = useState<ChangeCorrelationHypothesis[] | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.incidentTickets(incident.id).then(setTickets).catch(() => setTickets([]));
     api.incidentRootCause(incident.id).then(setHypothesis).catch(() => setHypothesis(null));
+    // 404s (feature flag disabled) leaves this section simply absent — never a fabricated result.
+    api.incidentChangeCorrelations(incident.id).then(r => setChangeHypotheses(r.hypotheses)).catch(() => setChangeHypotheses(null));
   }, [incident.id]);
 
   async function act(action: "confirm" | "dismiss" | "resolve" | "notify") {
@@ -38,6 +41,12 @@ function IncidentDetail({ incident, onChanged }: { incident: Incident; onChanged
           <b>Root-cause hypothesis</b> — <em>{hypothesis.disclaimer}</em>
           {hypothesis.likely_symptom && <p>Likely symptom: {hypothesis.likely_symptom}</p>}
           {hypothesis.recurring_error_codes.length > 0 && <p>Recurring codes: {hypothesis.recurring_error_codes.map(c => `${c.code} (${c.occurrences})`).join(", ")}</p>}
+        </div>
+      )}
+      {changeHypotheses && changeHypotheses.length > 0 && (
+        <div className="recommendation">
+          <b>Recent changes before this incident</b> — <em>temporal proximity only, not a confirmed cause</em>
+          <ul>{changeHypotheses.map((h, i) => <li key={i}>{h.description} — {h.hours_before_incident.toFixed(1)}h before</li>)}</ul>
         </div>
       )}
       {tickets && (tickets.length ? (

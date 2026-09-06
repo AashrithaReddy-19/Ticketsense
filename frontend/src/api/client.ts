@@ -103,6 +103,7 @@ export interface Analytics { total_tickets:number; open_tickets:number; resolved
 export interface Incident { id:string; title:string; service:string; status:string; severity:string; department_id?:string|null; category?:string|null; ticket_count:number; growth_rate:number; common_symptom?:string; detection_reason?:string|null; confirmed_by?:string|null; confirmed_at?:string|null; resolved_at?:string|null; created_at?:string }
 export interface IncidentTicketSummary { id:string; subject:string; status:string; priority:string|null; created_at:string }
 export interface RootCauseHypothesis { incident_id:string; status:"hypothesis"; disclaimer:string; likely_symptom:string|null; recurring_error_codes:Array<{code:string;occurrences:number}>; supporting_ticket_ids:string[]; ticket_count:number }
+export interface ChangeCorrelationHypothesis { change_type:string; description:string; occurred_at:string; hours_before_incident:number; note:string }
 export interface SafeActionDefinition { action_key:string; display_name:string; description:string; category:string; risk_level:"low"|"medium"|"high"; required_capability:string; parameter_schema:Record<string,{type:string;required:boolean}>; requires_confirmation:boolean; requires_customer_consent:boolean; enabled:boolean; connector:string; timeout_seconds:number; supports_dry_run:boolean; supports_rollback:boolean }
 export interface SafeActionResultPayload { summary:string; data:Record<string,unknown>; evidence:unknown[]; sandbox:boolean; rollback_available:boolean; rolled_back:boolean }
 export interface SafeActionExecution { id:string; action_key:string; ticket_id:string|null; department_id:string|null; requested_by:string; mode:"preview"|"execute"; status:string; requires_approval:boolean; error_summary:string|null; started_at:string|null; completed_at:string|null; duration_ms:number|null; created_at:string; result?:SafeActionResultPayload }
@@ -225,6 +226,7 @@ export const api = {
   scanForIncidents: () => request<Incident[]>("/api/incidents/scan", { method: "POST" }),
   incidentTickets: (id:string) => request<IncidentTicketSummary[]>(`/api/incidents/${id}/tickets`),
   incidentRootCause: (id:string) => request<RootCauseHypothesis>(`/api/incidents/${id}/root-cause`),
+  incidentChangeCorrelations: (id:string) => request<{hypotheses:ChangeCorrelationHypothesis[]}>(`/api/incidents/${id}/change-correlations`),
   confirmIncident: (id:string) => request<Incident>(`/api/incidents/${id}/confirm`, { method: "POST" }),
   dismissIncident: (id:string) => request<Incident>(`/api/incidents/${id}/dismiss`, { method: "POST" }),
   notifyIncidentCustomers: (id:string) => request<{incident_id:string;notified:number}>(`/api/incidents/${id}/notify-customers`, { method: "POST" }),

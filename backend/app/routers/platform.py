@@ -231,6 +231,22 @@ async def incident_root_cause(incident_id: UUID, user: User = Depends(get_curren
     return await root_cause_hypothesis(db, incident)
 
 
+@router.get("/incidents/{incident_id}/change-correlations")
+async def incident_change_correlations(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Real, timestamped changes (feature flags, AI model deployments, knowledge
+    article edits) that happened shortly before this incident — temporal proximity
+    only, never a confirmed cause. See app.services.change_correlation."""
+    await guard(db, user, "incident:manage", "ticket:internal_ai")
+    from app.routers.auth import _permissions
+    from app.services.feature_flags import require_feature
+    await require_feature(db, "change_correlation", user, await _permissions(db, user))
+    incident = await db.scalar(select(Incident).where(Incident.id == incident_id, Incident.tenant_id == user.tenant_id))
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    from app.services.change_correlation import correlate_incident_with_recent_changes
+    return {"hypotheses": await correlate_incident_with_recent_changes(db, incident)}
+
+
 @router.post("/incidents/{incident_id}/confirm")
 async def confirm_incident(incident_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """A candidate incident (auto-detected) requires an explicit Admin confirmation
